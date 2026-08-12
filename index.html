@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NIB Procurement Ledger</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --paper:#F4F1E9; --paper-2:#FBFAF5; --ink:#1C2A44; --ink-soft:#5A6478;
+    --rule:#DAD3C2; --rule-2:#ECE6D6; --brass:#9C6B1E; --brass-soft:#F0E4CC;
+    --green:#2F6B3A; --danger:#A23B2E;
+    --shadow:0 1px 2px rgba(28,42,68,.06), 0 8px 24px rgba(28,42,68,.06);
+  }
+  *{ box-sizing:border-box; }
+  html{ -webkit-text-size-adjust:100%; }
+  body{ margin:0; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:15px; line-height:1.5; }
+  .num{ font-family:"SFMono-Regular",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+  .wrap{ max-width:1080px; margin:0 auto; padding:24px 20px 72px; }
+
+  header.mast{ border-bottom:2px solid var(--ink); padding-bottom:16px; margin-bottom:24px; }
+  .mast-row{ display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; }
+  .mast h1{ font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:clamp(26px,4vw,40px);
+    margin:0; letter-spacing:-.01em; line-height:1.05; }
+  .mast .sub{ color:var(--ink-soft); font-size:13px; margin-top:6px; letter-spacing:.02em; text-transform:uppercase; }
+  .picker{ display:flex; flex-direction:column; gap:5px; }
+  .picker label{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); font-weight:600; }
+  select#year, select#monthFilter{ font:inherit; font-size:14px; padding:8px 10px; border:1px solid var(--rule);
+    background:var(--paper-2); color:var(--ink); border-radius:8px; cursor:pointer; }
+
+  /* Site (blue) bar */
+  .site-bar{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;
+    margin-top:16px; padding:12px 14px; background:var(--ink); border-radius:10px; }
+  .site-left{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .site-left label{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:#B9C2D6; font-weight:700; }
+  select#site{ font:inherit; font-size:15px; font-weight:600; padding:8px 12px; border:1px solid #33456A;
+    background:#24365A; color:#fff; border-radius:8px; cursor:pointer; max-width:min(70vw,360px); }
+  .site-count{ font-size:11px; color:#B9C2D6; letter-spacing:.03em; }
+  .site-actions{ display:flex; gap:7px; flex-wrap:wrap; }
+  .site-btn{ font:inherit; font-size:12px; font-weight:600; padding:7px 12px; cursor:pointer;
+    background:transparent; color:#E7ECF5; border:1px solid #3A4C70; border-radius:7px; }
+  .site-btn:hover{ border-color:var(--brass); color:#fff; background:#2A3C60; }
+  .site-btn.add{ background:var(--brass); border-color:var(--brass); color:#fff; }
+  .site-btn.add:hover{ filter:brightness(1.1); }
+  .site-btn.danger:hover{ border-color:var(--danger); color:#fff; background:#5A2620; }
+  .site-btn:disabled{ opacity:.4; cursor:not-allowed; }
+
+  .summary{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:24px; }
+  .stat{ background:var(--paper-2); border:1px solid var(--rule); border-radius:12px; padding:16px 18px; box-shadow:var(--shadow); }
+  .stat .k{ font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); }
+  .stat .v{ font-size:clamp(22px,3.4vw,30px); margin-top:6px; font-weight:600; }
+  .stat.total .v{ color:var(--brass); }
+  .stat.total{ border-color:var(--brass); background:linear-gradient(180deg,var(--brass-soft),var(--paper-2)); }
+
+  .panel,.chart-panel,.vendor-panel,.months-panel{ background:var(--paper-2); border:1px solid var(--rule);
+    border-radius:12px; padding:20px; box-shadow:var(--shadow); margin-bottom:24px; }
+  .panel h2,.chart-panel h2,.vendor-panel h2,.months-panel h2{
+    font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:18px; margin:0 0 4px;
+    display:flex; align-items:center; gap:10px; }
+  .panel h2::before,.chart-panel h2::before,.vendor-panel h2::before,.months-panel h2::before{
+    content:""; width:6px; height:18px; background:var(--brass); border-radius:2px; display:inline-block; }
+  .panel h2{ margin-bottom:16px; }
+  .cap{ font-size:12px; color:var(--ink-soft); margin:0 0 16px; padding-left:16px; }
+
+  .grid{ display:grid; grid-template-columns:repeat(12,1fr); gap:12px; align-items:end; }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field label{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); font-weight:600; }
+  .field input{ font:inherit; padding:9px 11px; border:1px solid var(--rule); border-radius:8px;
+    background:#fff; color:var(--ink); width:100%; }
+  .field input:focus{ outline:2px solid var(--brass); outline-offset:1px; border-color:transparent; }
+  .c2{ grid-column:span 2; } .c3{ grid-column:span 3; } .c4{ grid-column:span 4; }
+  .c5{ grid-column:span 5; } .c6{ grid-column:span 6; } .c12{ grid-column:span 12; }
+  .linetotal{ display:flex; flex-direction:column; gap:5px; justify-content:flex-end; }
+  .linetotal .lbl{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); font-weight:600; }
+  .linetotal .amt{ font-size:20px; font-weight:600; color:var(--brass); padding:7px 0; }
+  button{ font:inherit; cursor:pointer; border-radius:8px; border:1px solid transparent; }
+  .btn-add{ background:var(--ink); color:#fff; padding:11px 20px; font-weight:600; font-size:15px; width:100%; transition:filter .15s; }
+  .btn-add:hover{ filter:brightness(1.15); }
+  .btn-add:disabled{ opacity:.45; cursor:not-allowed; }
+
+  .chart-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; }
+  .budget-box{ display:flex; align-items:center; gap:8px; }
+  .budget-box label{ font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); font-weight:600; }
+  .budget-box .dollar{ position:relative; }
+  .budget-box input{ font:inherit; font-size:14px; width:120px; padding:8px 10px 8px 22px; border:1px solid var(--rule);
+    border-radius:8px; background:#fff; color:var(--ink); font-variant-numeric:tabular-nums; }
+  .budget-box .dollar::before{ content:"$"; position:absolute; left:9px; top:8px; color:var(--ink-soft); font-size:14px; }
+  .budget-box input:focus{ outline:2px solid var(--brass); outline-offset:1px; border-color:transparent; }
+  .legend{ display:flex; gap:14px; font-size:11px; color:var(--ink-soft); margin:0 0 14px 16px; flex-wrap:wrap; }
+  .legend .key{ display:inline-flex; align-items:center; gap:5px; }
+  .swatch{ width:11px; height:11px; border-radius:2px; display:inline-block; }
+  .sw-brass{ background:var(--brass); } .sw-over{ background:var(--danger); }
+  .sw-budget{ width:16px; height:0; border-top:2px dashed var(--ink); border-radius:0; }
+  .budget-line{ stroke:var(--ink); stroke-width:1.5; stroke-dasharray:5 4; }
+  .budget-tag{ font-size:10px; fill:var(--ink); font-weight:700; font-family:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace; }
+  .chart-wrap{ width:100%; overflow-x:auto; }
+  svg.chart{ display:block; width:100%; min-width:560px; height:auto; }
+  .bar{ fill:var(--brass); transition:opacity .15s; }
+  .bar:hover{ opacity:.78; }
+  .bar-over{ fill:var(--danger); }
+  .bar-lbl{ font-size:11px; fill:var(--ink-soft); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  .bar-val{ font-size:10px; fill:var(--ink); font-variant-numeric:tabular-nums; font-family:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace; }
+  .axis-line{ stroke:var(--rule); stroke-width:1; }
+  .chart-empty{ text-align:center; padding:28px 10px; color:var(--ink-soft); font-size:14px; }
+
+  .months-table{ width:100%; border-collapse:collapse; }
+  .months-table th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft);
+    font-weight:700; padding:10px 12px; border-bottom:2px solid var(--ink); }
+  .months-table th.r,.months-table td.r{ text-align:right; }
+  .months-table td{ padding:9px 12px; border-bottom:1px solid var(--rule); }
+  .months-table tr:nth-child(even) td{ background:var(--rule-2); }
+  .months-table .zero td{ color:var(--ink-soft); }
+  .months-table .yr td{ background:linear-gradient(180deg,var(--brass-soft),var(--paper-2)); font-weight:700;
+    border-top:3px double var(--ink); border-bottom:none; }
+  .months-table .yr .amt{ color:var(--brass); }
+
+  .ledger-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+  .ledger-head h2{ font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:20px; margin:0; }
+  .tools{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .btn-ghost{ background:var(--paper-2); border:1px solid var(--rule); color:var(--ink); padding:8px 14px;
+    font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px; }
+  .btn-ghost:hover{ border-color:var(--brass); color:var(--brass); }
+  .btn-ghost.danger:hover{ border-color:var(--danger); color:var(--danger); }
+  .table-scroll{ overflow-x:auto; border:1px solid var(--rule); border-radius:12px; background:var(--paper-2); box-shadow:var(--shadow); }
+  table.ledger{ width:100%; border-collapse:collapse; min-width:760px; }
+  table.ledger thead th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft);
+    font-weight:700; padding:12px 14px; border-bottom:2px solid var(--ink); background:var(--paper-2); position:sticky; top:0; }
+  table.ledger th.r, table.ledger td.r{ text-align:right; }
+  table.ledger tbody td{ padding:11px 14px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  table.ledger tbody tr:nth-child(even) td{ background:var(--rule-2); }
+  table.ledger tbody tr:hover td{ background:var(--brass-soft); }
+  .month-band td{ background:var(--ink) !important; color:var(--paper); font-weight:600; text-transform:uppercase;
+    letter-spacing:.05em; font-size:12px; padding:9px 14px; }
+  .month-band .msub{ color:#fff; }
+  .subtotal-row td{ background:var(--paper) !important; font-weight:600; border-top:1px solid var(--ink); border-bottom:2px solid var(--ink); }
+  .prod{ font-weight:600; }
+  .meta{ color:var(--ink-soft); font-size:12px; margin-top:2px; }
+  .del{ background:none; border:1px solid var(--rule); color:var(--ink-soft); width:26px; height:26px; line-height:1;
+    padding:0; font-size:15px; border-radius:6px; }
+  .del:hover{ border-color:var(--danger); color:var(--danger); }
+  .grand td{ background:linear-gradient(180deg,var(--brass-soft),var(--paper-2)) !important; border-top:3px double var(--ink);
+    font-size:16px; font-weight:700; }
+  .grand .amt{ color:var(--brass); }
+  .empty{ text-align:center; padding:56px 20px; color:var(--ink-soft); }
+  .empty .big{ font-family:"Fraunces",Georgia,serif; font-size:20px; color:var(--ink); margin-bottom:6px; }
+
+  footer{ margin-top:28px; font-size:12px; color:var(--ink-soft); text-align:center; line-height:1.7; }
+  footer .dot{ margin:0 6px; opacity:.5; }
+
+  @media (max-width:720px){
+    .summary{ grid-template-columns:1fr; }
+    .c2,.c3,.c4,.c5,.c6{ grid-column:span 6; }
+    .linetotal{ grid-column:span 6; }
+  }
+  @media (max-width:460px){ .c2,.c3,.c4,.c5,.c6,.linetotal{ grid-column:span 12; } }
+  @media (prefers-reduced-motion:reduce){ *{ transition:none !important; } }
+</style>
+</head>
+
+<body>
+<div class="wrap">
+
+  <header class="mast">
+    <div class="mast-row">
+      <div>
+        <h1>NIB Procurement Ledger</h1>
+        <div class="sub">AbilityOne / National Industries for the Blind &nbsp;&bull;&nbsp; Mandatory Source Spend Record</div>
+      </div>
+      <div class="picker">
+        <label for="year">Fiscal year</label>
+        <select id="year" aria-label="Select year"></select>
+      </div>
+    </div>
+
+    <div class="site-bar">
+      <div class="site-left">
+        <label for="site">Site / location</label>
+        <select id="site" aria-label="Select site"></select>
+        <span class="site-count" id="site-count"></span>
+      </div>
+      <div class="site-actions">
+        <button class="site-btn add" id="btn-site-add">+ Add site</button>
+        <button class="site-btn" id="btn-site-rename">Rename</button>
+        <button class="site-btn danger" id="btn-site-delete">Delete</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="summary" aria-label="Spending summary">
+    <div class="stat"><div class="k">Line items this year</div><div class="v num" id="s-count">0</div></div>
+    <div class="stat"><div class="k">Units purchased this year</div><div class="v num" id="s-units">0</div></div>
+    <div class="stat total"><div class="k">Total NIB spend &mdash; <span id="s-year-label">year</span></div><div class="v num" id="s-total">$0.00</div></div>
+  </section>
+
+  <section class="panel">
+    <h2>Log a purchase</h2>
+    <div class="grid">
+      <div class="field c3">
+        <label for="f-date">Purchase date</label>
+        <input type="date" id="f-date" />
+      </div>
+      <div class="field c6">
+        <label for="f-product">Product / description</label>
+        <input type="text" id="f-product" placeholder="e.g. Multi-fold paper towels" autocomplete="off" />
+      </div>
+      <div class="field c3">
+        <label for="f-item">Mfg / item number</label>
+        <input type="text" id="f-item" placeholder="e.g. MFG 12345" autocomplete="off" />
+      </div>
+
+      <div class="field c4">
+        <label for="f-uom">Unit of measure</label>
+        <input type="text" id="f-uom" placeholder="e.g. 24/box, 6/cs" autocomplete="off" />
+      </div>
+      <div class="field c6">
+        <label for="f-vendor">Vendor (NPA / distributor)</label>
+        <input type="text" id="f-vendor" placeholder="e.g. NIB associated agency" autocomplete="off" />
+      </div>
+
+      <div class="field c3">
+        <label for="f-qty">Quantity</label>
+        <input type="number" id="f-qty" min="0" step="1" placeholder="0" />
+      </div>
+      <div class="field c3">
+        <label for="f-price">Unit price ($)</label>
+        <input type="number" id="f-price" min="0" step="0.01" placeholder="0.00" />
+      </div>
+      <div class="linetotal c3">
+        <span class="lbl">Line total</span>
+        <span class="amt num" id="f-linetotal">$0.00</span>
+      </div>
+
+      <div class="c12">
+        <button class="btn-add" id="btn-add" disabled>Add to ledger</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="chart-panel">
+    <div class="chart-top">
+      <div>
+        <h2>Monthly spend comparison</h2>
+        <p class="cap" id="chart-cap">NIB spend by month for the selected year</p>
+      </div>
+      <div class="budget-box">
+        <label for="f-budget">Monthly budget</label>
+        <span class="dollar"><input type="number" id="f-budget" min="0" step="50" placeholder="0.00" /></span>
+      </div>
+    </div>
+    <div class="legend" id="chart-legend">
+      <span class="key"><span class="swatch sw-brass"></span> Within budget</span>
+      <span class="key"><span class="swatch sw-over"></span> Over budget</span>
+      <span class="key"><span class="swatch sw-budget"></span> Budget line</span>
+    </div>
+    <div class="chart-wrap" id="chart-wrap"></div>
+  </section>
+
+  <section class="months-panel">
+    <h2>12-month summary &amp; running total</h2>
+    <p class="cap" id="months-cap">Every month of the year with its total and the running month-to-month total</p>
+    <div style="overflow-x:auto;">
+      <table class="months-table">
+        <thead>
+          <tr>
+            <th>Month</th>
+            <th class="r">Line items</th>
+            <th class="r">Units</th>
+            <th class="r">Monthly total</th>
+            <th class="r">Running total</th>
+          </tr>
+        </thead>
+        <tbody id="months-rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="vendor-panel">
+    <h2>Spend by vendor</h2>
+    <p class="cap" id="vendor-cap">Which NPAs and distributors your NIB dollars go to</p>
+    <div id="vendor-list"></div>
+  </section>
+
+  <div class="ledger-head">
+    <h2>Monthly ledger</h2>
+    <div class="tools">
+      <select id="monthFilter" aria-label="Filter by month"><option value="all">All months</option></select>
+      <button class="btn-ghost" id="btn-xlsx">&#8595; Excel (.xlsx)</button>
+      <button class="btn-ghost" id="btn-csv">&#8595; CSV</button>
+      <button class="btn-ghost danger" id="btn-clear">Clear year</button>
+    </div>
+  </div>
+
+  <div class="table-scroll">
+    <table class="ledger">
+      <thead>
+        <tr>
+          <th style="width:96px;">Date</th>
+          <th>Product &amp; details</th>
+          <th>Vendor</th>
+          <th class="r" style="width:70px;">Qty</th>
+          <th class="r" style="width:110px;">Unit price</th>
+          <th class="r" style="width:120px;">Line total</th>
+          <th style="width:44px;" aria-label="Remove"></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <footer>
+    Data is saved automatically in this browser on this device.
+    <span class="dot">&bull;</span>
+    Export to Excel or CSV any time for AbilityOne reporting.
+    <span class="dot">&bull;</span>
+    Nothing is uploaded anywhere.
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var STORE_KEY  = "nib_ledger_entries_v1";
+  var BUDGET_KEY = "nib_ledger_budgets_v1";
+  var DB_KEY     = "nib_ledger_v2";
+  var MAX_SITES  = 5;
+  var MONTHS = ["January","February","March","April","May","June",
+                "July","August","September","October","November","December"];
+  var EXTRA_SITES = ["Schriever - Ground","Schriever - Custodial"];
+
+  var DB = loadDB();
+  var entries, budgets;
+  useActiveSite();
+  var currentYear = new Date().getFullYear();
+
+  var $ = function(id){ return document.getElementById(id); };
+  var elYear=$("year"), elMonthFilter=$("monthFilter"), elSite=$("site");
+  var fDate=$("f-date"), fProduct=$("f-product"), fItem=$("f-item"), fUom=$("f-uom"),
+      fVendor=$("f-vendor"), fQty=$("f-qty"), fPrice=$("f-price"),
+      fLineTotal=$("f-linetotal"), btnAdd=$("btn-add"), fBudget=$("f-budget");
+
+  function genId(){ return "site-"+Date.now()+"-"+Math.random().toString(36).slice(2,6); }
+
+  function ensureExtraSites(db){
+    var names = db.accounts.map(function(a){ return a.name; });
+    EXTRA_SITES.forEach(function(w){
+      if(db.accounts.length<MAX_SITES && names.indexOf(w)<0){
+        var id=genId(); db.accounts.push({id:id,name:w}); db.sites[id]={entries:[],budgets:{}}; names.push(w);
+      }
+    });
+  }
+
+  function loadDB(){
+    try{
+      var raw=localStorage.getItem(DB_KEY);
+      if(raw){
+        var db=JSON.parse(raw);
+        if(db && db.accounts && db.accounts.length && db.sites){
+          if(!db._seed2){ ensureExtraSites(db); db._seed2=true; persist(db); }
+          return db;
+        }
+      }
+    }catch(e){}
+    var oldEntries=[], oldBudgets={};
+    try{ var e=localStorage.getItem(STORE_KEY);  if(e) oldEntries=JSON.parse(e)||[]; }catch(e){}
+    try{ var b=localStorage.getItem(BUDGET_KEY); if(b) oldBudgets=JSON.parse(b)||{}; }catch(e){}
+    var id=genId();
+    var db={ activeId:id, accounts:[{id:id,name:"Ft. Carson - Evans Army Hospital"}], sites:{}, _seed2:true };
+    db.sites[id]={ entries:oldEntries, budgets:oldBudgets };
+    ensureExtraSites(db);
+    persist(db);
+    return db;
+  }
+  function persist(db){ try{ localStorage.setItem(DB_KEY, JSON.stringify(db)); }catch(e){} }
+  function save(){ persist(DB); }
+  function activeSite(){ var s=DB.sites[DB.activeId]; if(!s){ s=DB.sites[DB.activeId]={entries:[],budgets:{}}; } return s; }
+  function activeName(){ var a=DB.accounts.filter(function(x){return x.id===DB.activeId;})[0]; return a?a.name:"Site"; }
+  function useActiveSite(){ var s=activeSite(); entries=s.entries; budgets=s.budgets; }
+  function saveBudgets(){ save(); }
+  function budgetFor(y){ return Number(budgets[y])||0; }
+
+  function money(n){ return "$"+(Number(n)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function ymd(d){ var p=String(d).split("-"); return { y:parseInt(p[0],10), m:parseInt(p[1],10)-1 }; }
+  function fmtDate(d){ var p=String(d).split("-"); return p.length!==3?d:(p[1]+"/"+p[2]+"/"+p[0].slice(2)); }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function lineTotal(e){ return (Number(e.qty)||0)*(Number(e.price)||0); }
+
+  function refreshYears(){
+    var years={}; entries.forEach(function(e){ years[ymd(e.date).y]=true; }); years[currentYear]=true;
+    var list=Object.keys(years).map(Number).sort(function(a,b){return b-a;});
+    elYear.innerHTML=list.map(function(y){ return '<option value="'+y+'"'+(y===currentYear?" selected":"")+'>'+y+"</option>"; }).join("");
+  }
+  function refreshSites(){
+    elSite.innerHTML=DB.accounts.map(function(a){
+      return '<option value="'+a.id+'"'+(a.id===DB.activeId?" selected":"")+'>'+esc(a.name)+'</option>'; }).join("");
+    $("site-count").textContent=DB.accounts.length+" of "+MAX_SITES+" sites";
+    $("btn-site-add").disabled=DB.accounts.length>=MAX_SITES;
+    $("btn-site-delete").disabled=DB.accounts.length<=1;
+  }
+
+  function updateLineTotal(){
+    var t=(parseFloat(fQty.value)||0)*(parseFloat(fPrice.value)||0);
+    fLineTotal.textContent=money(t);
+    btnAdd.disabled=!(fDate.value && fProduct.value.trim() && parseFloat(fQty.value)>0 && parseFloat(fPrice.value)>=0);
+  }
+  [fDate,fProduct,fQty,fPrice].forEach(function(el){ el.addEventListener("input",updateLineTotal); });
+
+  function addEntry(){
+    if(btnAdd.disabled) return;
+    entries.push({
+      id: Date.now()+"-"+Math.random().toString(36).slice(2,7),
+      date: fDate.value, product: fProduct.value.trim(), item: fItem.value.trim(),
+      uom: fUom.value.trim(), vendor: fVendor.value.trim(),
+      qty: parseFloat(fQty.value)||0, price: parseFloat(fPrice.value)||0
+    });
+    save();
+    fProduct.value=""; fItem.value=""; fUom.value=""; fQty.value=""; fPrice.value="";
+    updateLineTotal(); fProduct.focus();
+    var y=ymd(entries[entries.length-1].date).y;
+    if(y!==currentYear){ currentYear=y; refreshYears(); }
+    render();
+  }
+  btnAdd.addEventListener("click",addEntry);
+  fPrice.addEventListener("keydown",function(e){ if(e.key==="Enter") addEntry(); });
+
+  function removeEntry(id){
+    entries=entries.filter(function(e){ return e.id!==id; });
+    activeSite().entries=entries; save(); render();
+  }
+
+  function yearEntries(){
+    return entries.filter(function(e){ return ymd(e.date).y===currentYear; })
+      .sort(function(a,b){ return a.date<b.date?-1:a.date>b.date?1:0; });
+  }
+
+  function renderChart(){
+    var wrap=$("chart-wrap"); var ys=yearEntries();
+    var totals=new Array(12).fill(0);
+    ys.forEach(function(e){ totals[ymd(e.date).m]+=lineTotal(e); });
+    var max=Math.max.apply(null,totals);
+    $("chart-cap").textContent="NIB spend by month for "+currentYear+(ys.length?"":" \u2014 no entries yet");
+
+    var budget=budgetFor(currentYear);
+    $("chart-legend").style.display=budget>0?"flex":"none";
+    if(max<=0){ wrap.innerHTML='<div class="chart-empty">Add purchases above and your monthly bars will appear here.</div>'; return; }
+    var scaleMax=Math.max(max,budget);
+
+    var W=720,H=260,padL=8,padR=8,padT=22,padB=34;
+    var plotW=W-padL-padR, plotH=H-padT-padB, n=12, gap=10, bw=(plotW-gap*(n-1))/n, baseY=padT+plotH;
+    var svg='<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Monthly NIB spend '+currentYear+'" preserveAspectRatio="xMidYMid meet">';
+    svg+='<line class="axis-line" x1="'+padL+'" y1="'+baseY+'" x2="'+(W-padR)+'" y2="'+baseY+'"/>';
+    for(var i=0;i<12;i++){
+      var x=padL+i*(bw+gap), val=totals[i], h=val>0?Math.max(3,(val/scaleMax)*plotH):0, y=baseY-h;
+      var over=budget>0&&val>budget, cls=over?"bar bar-over":"bar";
+      if(val>0){
+        var tip=MONTHS[i]+" "+currentYear+": "+money(val)+(budget>0?(over?" (over by "+money(val-budget)+")":" ("+money(budget-val)+" under)"):"");
+        svg+='<rect class="'+cls+'" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="3"><title>'+esc(tip)+'</title></rect>';
+        var lbl=val>=1000?"$"+(val/1000).toFixed(1)+"k":"$"+Math.round(val);
+        svg+='<text class="bar-val" x="'+(x+bw/2).toFixed(1)+'" y="'+(y-6).toFixed(1)+'" text-anchor="middle">'+lbl+'</text>';
+      }
+      svg+='<text class="bar-lbl" x="'+(x+bw/2).toFixed(1)+'" y="'+(baseY+16)+'" text-anchor="middle">'+MONTHS[i].slice(0,3)+'</text>';
+    }
+    if(budget>0){
+      var by=baseY-(budget/scaleMax)*plotH;
+      svg+='<line class="budget-line" x1="'+padL+'" y1="'+by.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+by.toFixed(1)+'"/>';
+      var tagY=(by<padT+12)?by+13:by-5;
+      svg+='<text class="budget-tag" x="'+(W-padR)+'" y="'+tagY.toFixed(1)+'" text-anchor="end">Budget '+money(budget)+'</text>';
+    }
+    svg+='</svg>'; wrap.innerHTML=svg;
+  }
+
+  function renderMonths(){
+    var body=$("months-rows"); var ys=yearEntries();
+    var tot=new Array(12).fill(0), cnt=new Array(12).fill(0), units=new Array(12).fill(0);
+    ys.forEach(function(e){ var m=ymd(e.date).m; tot[m]+=lineTotal(e); cnt[m]+=1; units[m]+=(Number(e.qty)||0); });
+    $("months-cap").textContent="Every month of "+currentYear+" with its total and the running month-to-month total";
+    var running=0, html="", gc=0, gu=0;
+    for(var m=0;m<12;m++){
+      running+=tot[m]; gc+=cnt[m]; gu+=units[m];
+      html+='<tr class="'+(tot[m]===0?"zero":"")+'">'+
+        '<td>'+MONTHS[m]+' '+currentYear+'</td>'+
+        '<td class="r num">'+cnt[m]+'</td>'+
+        '<td class="r num">'+units[m].toLocaleString("en-US")+'</td>'+
+        '<td class="r num">'+money(tot[m])+'</td>'+
+        '<td class="r num">'+money(running)+'</td></tr>';
+    }
+    html+='<tr class="yr"><td>'+currentYear+' total</td><td class="r num">'+gc+'</td>'+
+      '<td class="r num">'+gu.toLocaleString("en-US")+'</td>'+
+      '<td class="r num amt">'+money(running)+'</td><td class="r num amt">'+money(running)+'</td></tr>';
+    body.innerHTML=html;
+  }
+
+  function renderVendors(){
+    var list=$("vendor-list"); var ys=yearEntries();
+    var byV={}; ys.forEach(function(e){
+      var name=(e.vendor&&e.vendor.trim())?e.vendor.trim():"Unspecified vendor"; byV[name]=(byV[name]||0)+lineTotal(e); });
+    var rows=Object.keys(byV).map(function(k){ return {name:k,total:byV[k]}; })
+      .filter(function(r){return r.total>0;}).sort(function(a,b){return b.total-a.total;});
+    $("vendor-cap").textContent="Which NPAs and distributors your NIB dollars go to in "+currentYear;
+    if(!rows.length){ list.innerHTML='<div style="text-align:center;padding:24px 10px;color:var(--ink-soft);font-size:14px;">No vendor spend yet. Add the vendor when you log a purchase and it will break down here.</div>'; return; }
+    var grand=rows.reduce(function(s,r){return s+r.total;},0), top=rows[0].total;
+    list.innerHTML=rows.map(function(r){
+      var pct=grand>0?(r.total/grand*100):0, w=top>0?(r.total/top*100):0;
+      return '<div style="display:grid;grid-template-columns:minmax(110px,1.3fr) 3fr auto;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule);">'+
+        '<div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(r.name)+'">'+esc(r.name)+'</div>'+
+        '<div style="background:var(--rule-2);border-radius:6px;height:22px;overflow:hidden;"><div style="background:var(--brass);height:100%;border-radius:6px 0 0 6px;min-width:2px;width:'+w.toFixed(1)+'%"></div></div>'+
+        '<div style="text-align:right;white-space:nowrap;"><span class="num" style="font-weight:600;">'+money(r.total)+'</span>'+
+        '<span class="num" style="font-size:11px;color:var(--ink-soft);display:block;">'+pct.toFixed(1)+'% of year</span></div></div>';
+    }).join("");
+  }
+
+  function render(){
+    var ys=yearEntries();
+    var monthFilterVal=elMonthFilter.value;
+
+    renderChart(); renderMonths(); renderVendors();
+
+    var yTotal=0,yUnits=0; ys.forEach(function(e){ yTotal+=lineTotal(e); yUnits+=(Number(e.qty)||0); });
+    $("s-count").textContent=ys.length.toLocaleString("en-US");
+    $("s-units").textContent=yUnits.toLocaleString("en-US");
+    $("s-total").textContent=money(yTotal);
+    $("s-year-label").textContent=currentYear;
+
+    var present={}; ys.forEach(function(e){ present[ymd(e.date).m]=true; });
+    var opts='<option value="all">All months</option>';
+    Object.keys(present).map(Number).sort(function(a,b){return a-b;}).forEach(function(m){ opts+='<option value="'+m+'">'+MONTHS[m]+'</option>'; });
+    elMonthFilter.innerHTML=opts;
+    if(present[monthFilterVal]||monthFilterVal==="all") elMonthFilter.value=monthFilterVal;
+
+    var groups={};
+    ys.forEach(function(e){ var m=ymd(e.date).m; if(monthFilterVal!=="all"&&String(m)!==String(monthFilterVal))return; (groups[m]=groups[m]||[]).push(e); });
+    var rows=$("rows"), months=Object.keys(groups).map(Number).sort(function(a,b){return a-b;});
+
+    if(!months.length){
+      rows.innerHTML='<tr><td colspan="7"><div class="empty"><div class="big">No entries yet</div>Log a purchase above and it will appear here, grouped by month with running totals.</div></td></tr>';
+      return;
+    }
+    var html="",grand=0;
+    months.forEach(function(m){
+      var listM=groups[m],mSub=0,mUnits=0;
+      listM.forEach(function(e){ mSub+=lineTotal(e); mUnits+=(Number(e.qty)||0); });
+      grand+=mSub;
+      html+='<tr class="month-band"><td colspan="4">'+MONTHS[m]+' '+currentYear+'</td><td class="r msub">'+mUnits.toLocaleString("en-US")+' units</td><td class="r msub num">'+money(mSub)+'</td><td></td></tr>';
+      listM.forEach(function(e){
+        var details=[]; if(e.item) details.push("Mfg "+esc(e.item)); if(e.uom) details.push(esc(e.uom));
+        html+='<tr>'+
+          '<td class="num">'+fmtDate(e.date)+'</td>'+
+          '<td><div class="prod">'+esc(e.product)+'</div>'+(details.length?'<div class="meta">'+details.join(" &middot; ")+'</div>':'')+'</td>'+
+          '<td>'+(e.vendor?esc(e.vendor):'&mdash;')+'</td>'+
+          '<td class="r num">'+(Number(e.qty)||0).toLocaleString("en-US")+'</td>'+
+          '<td class="r num">'+money(e.price)+'</td>'+
+          '<td class="r num">'+money(lineTotal(e))+'</td>'+
+          '<td class="r"><button class="del" title="Remove entry" data-id="'+e.id+'">&times;</button></td></tr>';
+      });
+      html+='<tr class="subtotal-row"><td colspan="5" class="r">'+MONTHS[m]+' subtotal</td><td class="r num">'+money(mSub)+'</td><td></td></tr>';
+    });
+    var label=(monthFilterVal==="all")?currentYear+" total":"Filtered total";
+    html+='<tr class="grand"><td colspan="5" class="r">'+label+'</td><td class="r num amt">'+money(grand)+'</td><td></td></tr>';
+    rows.innerHTML=html;
+    Array.prototype.forEach.call(rows.querySelectorAll(".del"),function(b){ b.addEventListener("click",function(){ removeEntry(b.getAttribute("data-id")); }); });
+  }
+
+  function exportRows(){
+    return yearEntries().map(function(e){
+      return { Date:e.date, Product:e.product, "Mfg / Item Number":e.item||"", "Unit of Measure":e.uom||"",
+        "Vendor (NPA)":e.vendor||"", Quantity:Number(e.qty)||0, "Unit Price":Number(e.price)||0,
+        "Line Total":lineTotal(e), Month:MONTHS[ymd(e.date).m] };
+    });
+  }
+  function downloadBlob(content,filename,mime){
+    var blob=new Blob([content],{type:mime}), url=URL.createObjectURL(blob), a=document.createElement("a");
+    a.href=url; a.download=filename; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); },500);
+  }
+  function fileSlug(){
+    var s=activeName().replace(/[^\w\s-]/g,"").trim().replace(/\s+/g,"-");
+    return (s||"Site")+"-NIB-"+currentYear;
+  }
+  function noData(){ alert("No entries to export for "+currentYear+" at "+activeName()+" yet."); }
+
+  function toCSV(){
+    var data=exportRows(); if(!data.length){ noData(); return; }
+    var headers=["Date","Product","Mfg / Item Number","Unit of Measure","Vendor (NPA)","Quantity","Unit Price","Line Total","Month"];
+    var lines=['"Site: '+activeName().replace(/"/g,'""')+'","Fiscal year '+currentYear+'"'];
+    lines.push(headers.join(","));
+    var grand=0;
+    data.forEach(function(r){
+      grand+=r["Line Total"];
+      lines.push(headers.map(function(h){
+        var v=r[h];
+        if(typeof v==="number") return (h==="Unit Price"||h==="Line Total")?v.toFixed(2):v;
+        v=String(v==null?"":v).replace(/"/g,'""'); return /[",\n]/.test(v)?'"'+v+'"':v;
+      }).join(","));
+    });
+    lines.push(new Array(headers.length).fill("").join(","));
+    lines.push('"NIB TOTAL '+currentYear+'",,,,,,,'+grand.toFixed(2)+',');
+    downloadBlob("\uFEFF"+lines.join("\r\n"), fileSlug()+".csv", "text/csv;charset=utf-8;");
+  }
+
+  function toXLSX(){
+    if(typeof XLSX==="undefined"){ toCSV(); return; }
+    var data=exportRows(); if(!data.length){ noData(); return; }
+    var grand=data.reduce(function(s,r){return s+r["Line Total"];},0);
+    var units=data.reduce(function(s,r){return s+r.Quantity;},0);
+    var aoa=[["NIB Procurement Ledger - AbilityOne Mandatory Source Spend"],
+             ["Site: "+activeName()],
+             ["Fiscal year "+currentYear],[],
+             ["Date","Product","Mfg / Item Number","Unit of Measure","Vendor (NPA)","Quantity","Unit Price","Line Total","Month"]];
+    data.forEach(function(r){ aoa.push([r.Date,r.Product,r["Mfg / Item Number"],r["Unit of Measure"],r["Vendor (NPA)"],r.Quantity,r["Unit Price"],r["Line Total"],r.Month]); });
+    aoa.push([]); aoa.push(["","","","","TOTALS",units,"",grand,""]);
+    var ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"]=[{wch:12},{wch:30},{wch:20},{wch:15},{wch:22},{wch:10},{wch:12},{wch:13},{wch:12}];
+    var firstDataRow=6;
+    for(var R=firstDataRow-1; R<aoa.length; R++){
+      ["G","H"].forEach(function(col){ var cell=ws[col+(R+1)]; if(cell&&typeof cell.v==="number") cell.z='"$"#,##0.00'; });
+    }
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,String(currentYear));
+
+    var tot=new Array(12).fill(0), cnt=new Array(12).fill(0);
+    data.forEach(function(r){ var mi=MONTHS.indexOf(r.Month); if(mi>=0){ tot[mi]+=r["Line Total"]; cnt[mi]+=1; } });
+    var run=0, maoa=[["12-Month Summary - "+currentYear],["Site: "+activeName()],[],["Month","Line items","Monthly total","Running total"]];
+    for(var mm=0;mm<12;mm++){ run+=tot[mm]; maoa.push([MONTHS[mm], cnt[mm], tot[mm], run]); }
+    maoa.push([]); maoa.push(["YEAR TOTAL","",run,run]);
+    var wsm=XLSX.utils.aoa_to_sheet(maoa); wsm["!cols"]=[{wch:14},{wch:12},{wch:14},{wch:14}];
+    for(var r3=4;r3<maoa.length;r3++){ ["C","D"].forEach(function(col){ var c=wsm[col+(r3+1)]; if(c&&typeof c.v==="number") c.z='"$"#,##0.00'; }); }
+    XLSX.utils.book_append_sheet(wb,wsm,"12-Month Summary");
+
+    var byV={}; data.forEach(function(r){ var name=(r["Vendor (NPA)"]&&String(r["Vendor (NPA)"]).trim())?String(r["Vendor (NPA)"]).trim():"Unspecified vendor"; byV[name]=(byV[name]||0)+r["Line Total"]; });
+    var vrows=Object.keys(byV).map(function(k){return [k,byV[k]];}).sort(function(a,b){return b[1]-a[1];});
+    var vaoa=[["Spend by vendor - "+currentYear],[],["Vendor (NPA)","Total spend","% of year"]];
+    vrows.forEach(function(v){ vaoa.push([v[0],v[1],grand>0?v[1]/grand:0]); });
+    vaoa.push([]); vaoa.push(["TOTAL",grand,grand>0?1:0]);
+    var wsv=XLSX.utils.aoa_to_sheet(vaoa); wsv["!cols"]=[{wch:30},{wch:14},{wch:12}];
+    for(var r2=3;r2<vaoa.length;r2++){ var c1=wsv["B"+(r2+1)]; if(c1&&typeof c1.v==="number") c1.z='"$"#,##0.00'; var c2=wsv["C"+(r2+1)]; if(c2&&typeof c2.v==="number") c2.z='0.0%'; }
+    XLSX.utils.book_append_sheet(wb,wsv,"By Vendor");
+
+    XLSX.writeFile(wb, fileSlug()+".xlsx");
+  }
+
+  $("btn-csv").addEventListener("click",toCSV);
+  $("btn-xlsx").addEventListener("click",toXLSX);
+  $("btn-clear").addEventListener("click",function(){
+    if(!yearEntries().length){ alert("Nothing to clear for "+currentYear+" at "+activeName()+"."); return; }
+    if(confirm("Delete ALL "+currentYear+" entries for \""+activeName()+"\"? This cannot be undone.\n\nTip: export to Excel first if you need a record.")){
+      entries=entries.filter(function(e){ return ymd(e.date).y!==currentYear; });
+      activeSite().entries=entries; save(); render();
+    }
+  });
+
+  function syncBudgetInput(){ var b=budgetFor(currentYear); fBudget.value=b>0?b:""; }
+
+  function switchSite(id){
+    if(!DB.sites[id]) return;
+    DB.activeId=id; useActiveSite(); save();
+    refreshSites(); refreshYears(); elMonthFilter.value="all"; syncBudgetInput(); render();
+  }
+  elSite.addEventListener("change",function(){ switchSite(elSite.value); });
+  $("btn-site-add").addEventListener("click",function(){
+    if(DB.accounts.length>=MAX_SITES){ alert("You can have up to "+MAX_SITES+" sites."); return; }
+    var name=prompt("Name this site / location:","");
+    if(name===null) return; name=name.trim(); if(!name) return;
+    var id=genId(); DB.accounts.push({id:id,name:name}); DB.sites[id]={entries:[],budgets:{}}; switchSite(id);
+  });
+  $("btn-site-rename").addEventListener("click",function(){
+    var name=prompt("Rename this site:",activeName());
+    if(name===null) return; name=name.trim(); if(!name) return;
+    DB.accounts.forEach(function(a){ if(a.id===DB.activeId) a.name=name; }); save(); refreshSites();
+  });
+  $("btn-site-delete").addEventListener("click",function(){
+    if(DB.accounts.length<=1){ alert("You need at least one site."); return; }
+    if(!confirm("Delete the site \""+activeName()+"\" and ALL of its entries? This cannot be undone.\n\nTip: export it to Excel first if you need a record.")) return;
+    var goneId=DB.activeId;
+    DB.accounts=DB.accounts.filter(function(a){ return a.id!==goneId; });
+    delete DB.sites[goneId]; DB.activeId=DB.accounts[0].id; useActiveSite(); save(); switchSite(DB.activeId);
+  });
+
+  elYear.addEventListener("change",function(){ currentYear=parseInt(elYear.value,10); elMonthFilter.value="all"; syncBudgetInput(); render(); });
+  elMonthFilter.addEventListener("change",render);
+  fBudget.addEventListener("input",function(){
+    var v=parseFloat(fBudget.value);
+    if(fBudget.value===""||isNaN(v)||v<=0){ delete budgets[currentYear]; } else { budgets[currentYear]=v; }
+    saveBudgets(); renderChart();
+  });
+
+  fDate.value=new Date().toISOString().slice(0,10);
+  refreshSites(); refreshYears(); syncBudgetInput(); updateLineTotal(); render();
+})();
+</script>
+</body>
+</html>
