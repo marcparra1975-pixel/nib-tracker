@@ -185,12 +185,10 @@
       <div class="site-left">
         <label for="site">Site / location</label>
         <select id="site" aria-label="Select site"></select>
-        <span class="site-count" id="site-count"></span>
+        <span class="site-count" id="cloud-status">Connecting&hellip;</span>
       </div>
       <div class="site-actions">
-        <button class="site-btn add" id="btn-site-add">+ Add site</button>
-        <button class="site-btn" id="btn-site-rename">Rename</button>
-        <button class="site-btn danger" id="btn-site-delete">Delete</button>
+        <button class="site-btn" id="btn-refresh">&#8635; Refresh</button>
       </div>
     </div>
   </header>
@@ -330,132 +328,149 @@
 (function(){
   "use strict";
 
-  var STORE_KEY  = "nib_ledger_entries_v1";
-  var BUDGET_KEY = "nib_ledger_budgets_v1";
-  var DB_KEY     = "nib_ledger_v2";
-  var MAX_SITES  = 5;
+  /* =========================================================
+     SUPABASE CONNECTION  (safe to be here: publishable key)
+     To change sites later, edit the SITES list below,
+     then re-upload index.html to GitHub.
+     ========================================================= */
+  var SB_URL = "https://cmglzngevatkjwtwyxnb.supabase.co";
+  var SB_KEY = "sb_publishable_mnVHxB09Db-PG9ToKVAFKw_7hIp4N64";
+  var SITES  = ["Ft. Carson - Evans Army Hospital","Schriever - Ground","Schriever - Custodial"];
+  var REST   = SB_URL + "/rest/v1/purchases";
+
   var MONTHS = ["January","February","March","April","May","June",
                 "July","August","September","October","November","December"];
-  var EXTRA_SITES = ["Schriever - Ground","Schriever - Custodial"];
 
-  var DB = loadDB();
-  var entries, budgets;
-  useActiveSite();
+  var entries = [];                 // rows for current site + year (from cloud)
+  var currentSite = SITES[0];
   var currentYear = new Date().getFullYear();
+  var busy = false;
 
   var $ = function(id){ return document.getElementById(id); };
-  var elYear=$("year"), elMonthFilter=$("monthFilter"), elSite=$("site");
+  var elYear=$("year"), elMonthFilter=$("monthFilter"), elSite=$("site"), elStatus=$("cloud-status");
   var fDate=$("f-date"), fProduct=$("f-product"), fItem=$("f-item"), fUom=$("f-uom"),
       fVendor=$("f-vendor"), fQty=$("f-qty"), fPrice=$("f-price"),
       fLineTotal=$("f-linetotal"), btnAdd=$("btn-add"), fBudget=$("f-budget");
 
-  function genId(){ return "site-"+Date.now()+"-"+Math.random().toString(36).slice(2,6); }
-
-  function ensureExtraSites(db){
-    var names = db.accounts.map(function(a){ return a.name; });
-    EXTRA_SITES.forEach(function(w){
-      if(db.accounts.length<MAX_SITES && names.indexOf(w)<0){
-        var id=genId(); db.accounts.push({id:id,name:w}); db.sites[id]={entries:[],budgets:{}}; names.push(w);
-      }
-    });
+  /* ---------- Supabase REST helpers ---------- */
+  function sbHeaders(extra){
+    var h={ "apikey":SB_KEY, "Authorization":"Bearer "+SB_KEY, "Content-Type":"application/json" };
+    if(extra){ for(var k in extra) h[k]=extra[k]; }
+    return h;
+  }
+  function sbSelect(site,year){
+    var url=REST+"?select=*&site=eq."+encodeURIComponent(site)+
+            "&purchase_date=gte."+year+"-01-01&purchase_date=lte."+year+"-12-31"+
+            "&order=purchase_date.asc";
+    return fetch(url,{headers:sbHeaders()}).then(function(r){ if(!r.ok) throw new Error("load "+r.status); return r.json(); });
+  }
+  function sbInsert(row){
+    return fetch(REST,{method:"POST",headers:sbHeaders({"Prefer":"return=representation"}),body:JSON.stringify(row)})
+      .then(function(r){ if(!r.ok) throw new Error("insert "+r.status); return r.json(); });
+  }
+  function sbDelete(id){
+    return fetch(REST+"?id=eq."+encodeURIComponent(id),{method:"DELETE",headers:sbHeaders()})
+      .then(function(r){ if(!r.ok) throw new Error("delete "+r.status); });
+  }
+  function sbDeleteYear(site,year){
+    var url=REST+"?site=eq."+encodeURIComponent(site)+
+            "&purchase_date=gte."+year+"-01-01&purchase_date=lte."+year+"-12-31";
+    return fetch(url,{method:"DELETE",headers:sbHeaders()})
+      .then(function(r){ if(!r.ok) throw new Error("clear "+r.status); });
   }
 
-  function loadDB(){
-    try{
-      var raw=localStorage.getItem(DB_KEY);
-      if(raw){
-        var db=JSON.parse(raw);
-        if(db && db.accounts && db.accounts.length && db.sites){
-          if(!db._seed2){ ensureExtraSites(db); db._seed2=true; persist(db); }
-          return db;
-        }
-      }
-    }catch(e){}
-    var oldEntries=[], oldBudgets={};
-    try{ var e=localStorage.getItem(STORE_KEY);  if(e) oldEntries=JSON.parse(e)||[]; }catch(e){}
-    try{ var b=localStorage.getItem(BUDGET_KEY); if(b) oldBudgets=JSON.parse(b)||{}; }catch(e){}
-    var id=genId();
-    var db={ activeId:id, accounts:[{id:id,name:"Ft. Carson - Evans Army Hospital"}], sites:{}, _seed2:true };
-    db.sites[id]={ entries:oldEntries, budgets:oldBudgets };
-    ensureExtraSites(db);
-    persist(db);
-    return db;
+  function status(kind){
+    if(kind==="loading"){ elStatus.textContent="Loading\u2026"; elStatus.style.color="#B9C2D6"; }
+    else if(kind==="saving"){ elStatus.textContent="Saving\u2026"; elStatus.style.color="#B9C2D6"; }
+    else if(kind==="synced"){ elStatus.textContent="\u2601 Saved to cloud"; elStatus.style.color="#8FE3B0"; }
+    else if(kind==="error"){ elStatus.textContent="\u26A0 Connection problem \u2014 try Refresh"; elStatus.style.color="#F2B8A2"; }
   }
-  function persist(db){ try{ localStorage.setItem(DB_KEY, JSON.stringify(db)); }catch(e){} }
-  function save(){ persist(DB); }
-  function activeSite(){ var s=DB.sites[DB.activeId]; if(!s){ s=DB.sites[DB.activeId]={entries:[],budgets:{}}; } return s; }
-  function activeName(){ var a=DB.accounts.filter(function(x){return x.id===DB.activeId;})[0]; return a?a.name:"Site"; }
-  function useActiveSite(){ var s=activeSite(); entries=s.entries; budgets=s.budgets; }
-  function saveBudgets(){ save(); }
-  function budgetFor(y){ return Number(budgets[y])||0; }
 
+  /* ---------- helpers ---------- */
   function money(n){ return "$"+(Number(n)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}); }
   function ymd(d){ var p=String(d).split("-"); return { y:parseInt(p[0],10), m:parseInt(p[1],10)-1 }; }
   function fmtDate(d){ var p=String(d).split("-"); return p.length!==3?d:(p[1]+"/"+p[2]+"/"+p[0].slice(2)); }
   function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
   function lineTotal(e){ return (Number(e.qty)||0)*(Number(e.price)||0); }
+  function activeName(){ return currentSite; }
 
-  function refreshYears(){
-    var years={}; entries.forEach(function(e){ years[ymd(e.date).y]=true; }); years[currentYear]=true;
-    var list=Object.keys(years).map(Number).sort(function(a,b){return b-a;});
+  /* ---------- budget (kept per-browser; planning aid only) ---------- */
+  function budKey(){ return "nib_budget::"+currentSite+"::"+currentYear; }
+  function getBudget(){ try{ var v=localStorage.getItem(budKey()); return v?Number(v):0; }catch(e){ return 0; } }
+  function setBudget(v){ try{ if(v>0) localStorage.setItem(budKey(),v); else localStorage.removeItem(budKey()); }catch(e){} }
+
+  /* ---------- dropdowns ---------- */
+  function fillSites(){
+    elSite.innerHTML=SITES.map(function(s){ return '<option value="'+esc(s)+'"'+(s===currentSite?" selected":"")+'>'+esc(s)+'</option>'; }).join("");
+  }
+  function fillYears(){
+    var now=new Date().getFullYear(), list=[];
+    for(var y=now+1;y>=now-3;y--) list.push(y);
+    if(list.indexOf(currentYear)<0) list.push(currentYear);
+    list.sort(function(a,b){return b-a;});
     elYear.innerHTML=list.map(function(y){ return '<option value="'+y+'"'+(y===currentYear?" selected":"")+'>'+y+"</option>"; }).join("");
   }
-  function refreshSites(){
-    elSite.innerHTML=DB.accounts.map(function(a){
-      return '<option value="'+a.id+'"'+(a.id===DB.activeId?" selected":"")+'>'+esc(a.name)+'</option>'; }).join("");
-    $("site-count").textContent=DB.accounts.length+" of "+MAX_SITES+" sites";
-    $("btn-site-add").disabled=DB.accounts.length>=MAX_SITES;
-    $("btn-site-delete").disabled=DB.accounts.length<=1;
+
+  /* ---------- load from cloud ---------- */
+  function loadEntries(){
+    status("loading");
+    return sbSelect(currentSite,currentYear).then(function(rows){
+      entries=rows.map(function(r){
+        return { id:r.id, date:r.purchase_date, product:r.product, item:r.item_no||"",
+                 uom:r.uom||"", vendor:r.vendor||"", qty:Number(r.qty)||0, price:Number(r.unit_price)||0 };
+      });
+      status("synced"); render();
+    }).catch(function(err){ status("error"); console.error(err); });
   }
 
+  function yearEntries(){
+    return entries.slice().sort(function(a,b){ return a.date<b.date?-1:a.date>b.date?1:0; });
+  }
+
+  /* ---------- form ---------- */
   function updateLineTotal(){
     var t=(parseFloat(fQty.value)||0)*(parseFloat(fPrice.value)||0);
     fLineTotal.textContent=money(t);
-    btnAdd.disabled=!(fDate.value && fProduct.value.trim() && parseFloat(fQty.value)>0 && parseFloat(fPrice.value)>=0);
+    btnAdd.disabled=busy || !(fDate.value && fProduct.value.trim() && parseFloat(fQty.value)>0 && parseFloat(fPrice.value)>=0);
   }
   [fDate,fProduct,fQty,fPrice].forEach(function(el){ el.addEventListener("input",updateLineTotal); });
 
   function addEntry(){
-    if(btnAdd.disabled) return;
-    entries.push({
-      id: Date.now()+"-"+Math.random().toString(36).slice(2,7),
-      date: fDate.value, product: fProduct.value.trim(), item: fItem.value.trim(),
-      uom: fUom.value.trim(), vendor: fVendor.value.trim(),
-      qty: parseFloat(fQty.value)||0, price: parseFloat(fPrice.value)||0
-    });
-    save();
-    fProduct.value=""; fItem.value=""; fUom.value=""; fQty.value=""; fPrice.value="";
-    updateLineTotal(); fProduct.focus();
-    var y=ymd(entries[entries.length-1].date).y;
-    if(y!==currentYear){ currentYear=y; refreshYears(); }
-    render();
+    if(btnAdd.disabled||busy) return;
+    busy=true; status("saving"); btnAdd.disabled=true;
+    var row={ site:currentSite, purchase_date:fDate.value, product:fProduct.value.trim(),
+      item_no:fItem.value.trim(), uom:fUom.value.trim(), vendor:fVendor.value.trim(),
+      qty:parseFloat(fQty.value)||0, unit_price:parseFloat(fPrice.value)||0 };
+    var y=ymd(row.purchase_date).y;
+    sbInsert(row).then(function(){
+      fProduct.value=""; fItem.value=""; fUom.value=""; fQty.value=""; fPrice.value="";
+      busy=false; updateLineTotal(); fProduct.focus();
+      if(y!==currentYear){ currentYear=y; fillYears(); }
+      return loadEntries();
+    }).catch(function(err){ busy=false; status("error"); updateLineTotal(); alert("Could not save to the cloud. Check your internet and try again."); console.error(err); });
   }
   btnAdd.addEventListener("click",addEntry);
   fPrice.addEventListener("keydown",function(e){ if(e.key==="Enter") addEntry(); });
 
   function removeEntry(id){
-    entries=entries.filter(function(e){ return e.id!==id; });
-    activeSite().entries=entries; save(); render();
+    if(busy) return;
+    busy=true; status("saving");
+    sbDelete(id).then(function(){ busy=false; return loadEntries(); })
+      .catch(function(err){ busy=false; status("error"); alert("Could not delete from the cloud. Try again."); console.error(err); });
   }
 
-  function yearEntries(){
-    return entries.filter(function(e){ return ymd(e.date).y===currentYear; })
-      .sort(function(a,b){ return a.date<b.date?-1:a.date>b.date?1:0; });
-  }
-
+  /* ---------- chart ---------- */
   function renderChart(){
     var wrap=$("chart-wrap"); var ys=yearEntries();
     var totals=new Array(12).fill(0);
     ys.forEach(function(e){ totals[ymd(e.date).m]+=lineTotal(e); });
     var max=Math.max.apply(null,totals);
     $("chart-cap").textContent="NIB spend by month for "+currentYear+(ys.length?"":" \u2014 no entries yet");
-
-    var budget=budgetFor(currentYear);
+    var budget=getBudget();
     $("chart-legend").style.display=budget>0?"flex":"none";
     if(max<=0){ wrap.innerHTML='<div class="chart-empty">Add purchases above and your monthly bars will appear here.</div>'; return; }
     var scaleMax=Math.max(max,budget);
-
     var W=720,H=260,padL=8,padR=8,padT=22,padB=34;
     var plotW=W-padL-padR, plotH=H-padT-padB, n=12, gap=10, bw=(plotW-gap*(n-1))/n, baseY=padT+plotH;
     var svg='<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Monthly NIB spend '+currentYear+'" preserveAspectRatio="xMidYMid meet">';
@@ -480,6 +495,7 @@
     svg+='</svg>'; wrap.innerHTML=svg;
   }
 
+  /* ---------- 12-month summary ---------- */
   function renderMonths(){
     var body=$("months-rows"); var ys=yearEntries();
     var tot=new Array(12).fill(0), cnt=new Array(12).fill(0), units=new Array(12).fill(0);
@@ -501,6 +517,7 @@
     body.innerHTML=html;
   }
 
+  /* ---------- vendor ---------- */
   function renderVendors(){
     var list=$("vendor-list"); var ys=yearEntries();
     var byV={}; ys.forEach(function(e){
@@ -520,11 +537,12 @@
     }).join("");
   }
 
+  /* ---------- main render ---------- */
   function render(){
     var ys=yearEntries();
     var monthFilterVal=elMonthFilter.value;
-
     renderChart(); renderMonths(); renderVendors();
+    fBudget.value=getBudget()>0?getBudget():"";
 
     var yTotal=0,yUnits=0; ys.forEach(function(e){ yTotal+=lineTotal(e); yUnits+=(Number(e.qty)||0); });
     $("s-count").textContent=ys.length.toLocaleString("en-US");
@@ -571,6 +589,7 @@
     Array.prototype.forEach.call(rows.querySelectorAll(".del"),function(b){ b.addEventListener("click",function(){ removeEntry(b.getAttribute("data-id")); }); });
   }
 
+  /* ---------- exports ---------- */
   function exportRows(){
     return yearEntries().map(function(e){
       return { Date:e.date, Product:e.product, "Mfg / Item Number":e.item||"", "Unit of Measure":e.uom||"",
@@ -607,27 +626,20 @@
     lines.push('"NIB TOTAL '+currentYear+'",,,,,,,'+grand.toFixed(2)+',');
     downloadBlob("\uFEFF"+lines.join("\r\n"), fileSlug()+".csv", "text/csv;charset=utf-8;");
   }
-
   function toXLSX(){
     if(typeof XLSX==="undefined"){ toCSV(); return; }
     var data=exportRows(); if(!data.length){ noData(); return; }
     var grand=data.reduce(function(s,r){return s+r["Line Total"];},0);
     var units=data.reduce(function(s,r){return s+r.Quantity;},0);
     var aoa=[["NIB Procurement Ledger - AbilityOne Mandatory Source Spend"],
-             ["Site: "+activeName()],
-             ["Fiscal year "+currentYear],[],
+             ["Site: "+activeName()],["Fiscal year "+currentYear],[],
              ["Date","Product","Mfg / Item Number","Unit of Measure","Vendor (NPA)","Quantity","Unit Price","Line Total","Month"]];
     data.forEach(function(r){ aoa.push([r.Date,r.Product,r["Mfg / Item Number"],r["Unit of Measure"],r["Vendor (NPA)"],r.Quantity,r["Unit Price"],r["Line Total"],r.Month]); });
     aoa.push([]); aoa.push(["","","","","TOTALS",units,"",grand,""]);
     var ws=XLSX.utils.aoa_to_sheet(aoa);
     ws["!cols"]=[{wch:12},{wch:30},{wch:20},{wch:15},{wch:22},{wch:10},{wch:12},{wch:13},{wch:12}];
-    var firstDataRow=6;
-    for(var R=firstDataRow-1; R<aoa.length; R++){
-      ["G","H"].forEach(function(col){ var cell=ws[col+(R+1)]; if(cell&&typeof cell.v==="number") cell.z='"$"#,##0.00'; });
-    }
-    var wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,String(currentYear));
-
+    for(var R=5; R<aoa.length; R++){ ["G","H"].forEach(function(col){ var cell=ws[col+(R+1)]; if(cell&&typeof cell.v==="number") cell.z='"$"#,##0.00'; }); }
+    var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,String(currentYear));
     var tot=new Array(12).fill(0), cnt=new Array(12).fill(0);
     data.forEach(function(r){ var mi=MONTHS.indexOf(r.Month); if(mi>=0){ tot[mi]+=r["Line Total"]; cnt[mi]+=1; } });
     var run=0, maoa=[["12-Month Summary - "+currentYear],["Site: "+activeName()],[],["Month","Line items","Monthly total","Running total"]];
@@ -636,7 +648,6 @@
     var wsm=XLSX.utils.aoa_to_sheet(maoa); wsm["!cols"]=[{wch:14},{wch:12},{wch:14},{wch:14}];
     for(var r3=4;r3<maoa.length;r3++){ ["C","D"].forEach(function(col){ var c=wsm[col+(r3+1)]; if(c&&typeof c.v==="number") c.z='"$"#,##0.00'; }); }
     XLSX.utils.book_append_sheet(wb,wsm,"12-Month Summary");
-
     var byV={}; data.forEach(function(r){ var name=(r["Vendor (NPA)"]&&String(r["Vendor (NPA)"]).trim())?String(r["Vendor (NPA)"]).trim():"Unspecified vendor"; byV[name]=(byV[name]||0)+r["Line Total"]; });
     var vrows=Object.keys(byV).map(function(k){return [k,byV[k]];}).sort(function(a,b){return b[1]-a[1];});
     var vaoa=[["Spend by vendor - "+currentYear],[],["Vendor (NPA)","Total spend","% of year"]];
@@ -645,57 +656,36 @@
     var wsv=XLSX.utils.aoa_to_sheet(vaoa); wsv["!cols"]=[{wch:30},{wch:14},{wch:12}];
     for(var r2=3;r2<vaoa.length;r2++){ var c1=wsv["B"+(r2+1)]; if(c1&&typeof c1.v==="number") c1.z='"$"#,##0.00'; var c2=wsv["C"+(r2+1)]; if(c2&&typeof c2.v==="number") c2.z='0.0%'; }
     XLSX.utils.book_append_sheet(wb,wsv,"By Vendor");
-
     XLSX.writeFile(wb, fileSlug()+".xlsx");
   }
 
   $("btn-csv").addEventListener("click",toCSV);
   $("btn-xlsx").addEventListener("click",toXLSX);
   $("btn-clear").addEventListener("click",function(){
+    if(busy) return;
     if(!yearEntries().length){ alert("Nothing to clear for "+currentYear+" at "+activeName()+"."); return; }
-    if(confirm("Delete ALL "+currentYear+" entries for \""+activeName()+"\"? This cannot be undone.\n\nTip: export to Excel first if you need a record.")){
-      entries=entries.filter(function(e){ return ymd(e.date).y!==currentYear; });
-      activeSite().entries=entries; save(); render();
+    if(confirm("Delete ALL "+currentYear+" entries for \""+activeName()+"\" from the cloud? This affects everyone and cannot be undone.\n\nTip: export to Excel first.")){
+      busy=true; status("saving");
+      sbDeleteYear(currentSite,currentYear).then(function(){ busy=false; return loadEntries(); })
+        .catch(function(err){ busy=false; status("error"); alert("Could not clear. Try again."); console.error(err); });
     }
   });
 
-  function syncBudgetInput(){ var b=budgetFor(currentYear); fBudget.value=b>0?b:""; }
-
-  function switchSite(id){
-    if(!DB.sites[id]) return;
-    DB.activeId=id; useActiveSite(); save();
-    refreshSites(); refreshYears(); elMonthFilter.value="all"; syncBudgetInput(); render();
-  }
-  elSite.addEventListener("change",function(){ switchSite(elSite.value); });
-  $("btn-site-add").addEventListener("click",function(){
-    if(DB.accounts.length>=MAX_SITES){ alert("You can have up to "+MAX_SITES+" sites."); return; }
-    var name=prompt("Name this site / location:","");
-    if(name===null) return; name=name.trim(); if(!name) return;
-    var id=genId(); DB.accounts.push({id:id,name:name}); DB.sites[id]={entries:[],budgets:{}}; switchSite(id);
-  });
-  $("btn-site-rename").addEventListener("click",function(){
-    var name=prompt("Rename this site:",activeName());
-    if(name===null) return; name=name.trim(); if(!name) return;
-    DB.accounts.forEach(function(a){ if(a.id===DB.activeId) a.name=name; }); save(); refreshSites();
-  });
-  $("btn-site-delete").addEventListener("click",function(){
-    if(DB.accounts.length<=1){ alert("You need at least one site."); return; }
-    if(!confirm("Delete the site \""+activeName()+"\" and ALL of its entries? This cannot be undone.\n\nTip: export it to Excel first if you need a record.")) return;
-    var goneId=DB.activeId;
-    DB.accounts=DB.accounts.filter(function(a){ return a.id!==goneId; });
-    delete DB.sites[goneId]; DB.activeId=DB.accounts[0].id; useActiveSite(); save(); switchSite(DB.activeId);
-  });
-
-  elYear.addEventListener("change",function(){ currentYear=parseInt(elYear.value,10); elMonthFilter.value="all"; syncBudgetInput(); render(); });
-  elMonthFilter.addEventListener("change",render);
   fBudget.addEventListener("input",function(){
     var v=parseFloat(fBudget.value);
-    if(fBudget.value===""||isNaN(v)||v<=0){ delete budgets[currentYear]; } else { budgets[currentYear]=v; }
-    saveBudgets(); renderChart();
+    if(fBudget.value===""||isNaN(v)||v<=0){ setBudget(0); } else { setBudget(v); }
+    renderChart();
   });
 
+  elSite.addEventListener("change",function(){ currentSite=elSite.value; elMonthFilter.value="all"; loadEntries(); });
+  elYear.addEventListener("change",function(){ currentYear=parseInt(elYear.value,10); elMonthFilter.value="all"; loadEntries(); });
+  elMonthFilter.addEventListener("change",render);
+  $("btn-refresh").addEventListener("click",function(){ if(!busy) loadEntries(); });
+
+  /* ---------- init ---------- */
   fDate.value=new Date().toISOString().slice(0,10);
-  refreshSites(); refreshYears(); syncBudgetInput(); updateLineTotal(); render();
+  fillSites(); fillYears(); updateLineTotal();
+  loadEntries();
 })();
 </script>
 </body>
