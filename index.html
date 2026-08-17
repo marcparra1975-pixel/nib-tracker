@@ -216,10 +216,47 @@
   .mast-logo img{ height:38px; width:auto; display:block; }
   .mast-logo .tag{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); font-weight:700; }
 
+  /* ---------- login gate ---------- */
+  #login-gate{ position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(160deg, var(--pcsi-navy) 0%, var(--pcsi-navy-2) 55%, var(--pcsi-green) 100%); padding:20px; }
+  body[data-authed="true"] #login-gate{ display:none; }
+  body:not([data-authed="true"]) .wrap,
+  body:not([data-authed="true"]) .watermark{ display:none; }
+  .login-card{ background:var(--paper); border-radius:14px; box-shadow:0 24px 60px rgba(10,14,30,.35);
+    width:100%; max-width:380px; padding:34px 30px 28px; text-align:center; }
+  .login-card img{ height:40px; width:auto; margin:0 auto 14px; display:block; }
+  .login-card h1{ font-family:"Fraunces",Georgia,serif; font-size:22px; margin:0 0 6px; color:var(--ink); }
+  .login-sub{ font-size:13px; color:var(--ink-soft); margin:0 0 22px; line-height:1.5; }
+  .login-card label{ display:block; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--ink-soft); font-weight:700; margin:14px 0 6px; }
+  .login-card input{ width:100%; padding:10px 12px; border:1px solid var(--rule); border-radius:8px; font-size:14px;
+    font-family:inherit; box-sizing:border-box; background:#fff; color:var(--ink); }
+  .login-card input:focus{ outline:2px solid var(--brass); outline-offset:1px; }
+  .login-card button{ width:100%; margin-top:20px; padding:11px 14px; border:none; border-radius:8px;
+    background:var(--pcsi-navy); color:#fff; font-weight:700; font-size:14px; cursor:pointer; font-family:inherit; }
+  .login-card button:hover{ opacity:.92; }
+  .login-card button:disabled{ opacity:.6; cursor:default; }
+  .login-error{ margin-top:14px; font-size:12.5px; color:var(--danger); min-height:1em; }
+
 </style>
 </head>
 
 <body>
+<div id="login-gate">
+  <div class="login-card">
+    <img id="login-logo" src="" alt="PCSI logo" />
+    <h1>NIB Procurement Ledger</h1>
+    <p class="login-sub">Sign in to view and edit procurement records.</p>
+    <form id="login-form">
+      <label for="login-email">Email</label>
+      <input type="email" id="login-email" required autocomplete="username" />
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" required autocomplete="current-password" />
+      <button type="submit" id="login-submit">Sign in</button>
+      <div class="login-error" id="login-error" role="alert"></div>
+    </form>
+  </div>
+</div>
 <div class="watermark wm-ledger" aria-hidden="true"></div>
 <div class="wrap">
 
@@ -251,7 +288,9 @@
         <span class="site-count" id="cloud-status">Connecting&hellip;</span>
       </div>
       <div class="site-actions">
+        <span class="site-count" id="auth-email"></span>
         <button class="site-btn" id="btn-refresh">&#8635; Refresh</button>
+        <button class="site-btn" id="btn-logout">Log out</button>
       </div>
     </div>
   </header>
@@ -468,6 +507,68 @@
   var SITES  = ["Ft. Carson - Evans Army Hospital","Schriever - Ground","Schriever - Custodial"];
   var REST   = SB_URL + "/rest/v1/purchases";
 
+  /* ---------- Supabase Auth (login) ---------- */
+  var AUTH_URL = SB_URL + "/auth/v1";
+  var AUTH_STORAGE_KEY = "nib_auth_session_v1";
+  function loadSession(){
+    try{ var raw=localStorage.getItem(AUTH_STORAGE_KEY); return raw? JSON.parse(raw) : null; }
+    catch(e){ return null; }
+  }
+  function saveSession(s){
+    session=s;
+    try{ localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(s)); }catch(e){}
+  }
+  function clearSession(){
+    session=null;
+    try{ localStorage.removeItem(AUTH_STORAGE_KEY); }catch(e){}
+  }
+  function authFetch(path,opts){
+    opts=opts||{};
+    var headers=opts.headers||{};
+    headers["apikey"]=SB_KEY;
+    headers["Content-Type"]="application/json";
+    opts.headers=headers;
+    return fetch(AUTH_URL+path,opts);
+  }
+  function signIn(email,password){
+    return authFetch("/token?grant_type=password",{
+      method:"POST", body:JSON.stringify({email:email,password:password})
+    }).then(function(r){
+      return r.json().then(function(data){
+        if(!r.ok) throw new Error(data.error_description||data.msg||"Sign in failed");
+        saveSession({
+          access_token:data.access_token, refresh_token:data.refresh_token,
+          expires_at:Date.now()+(data.expires_in||3600)*1000,
+          email:(data.user&&data.user.email)||email
+        });
+        return session;
+      });
+    });
+  }
+  function refreshSession(){
+    if(!session||!session.refresh_token) return Promise.reject(new Error("no session"));
+    return authFetch("/token?grant_type=refresh_token",{
+      method:"POST", body:JSON.stringify({refresh_token:session.refresh_token})
+    }).then(function(r){
+      return r.json().then(function(data){
+        if(!r.ok) throw new Error(data.error_description||data.msg||"Session expired");
+        saveSession({
+          access_token:data.access_token, refresh_token:data.refresh_token,
+          expires_at:Date.now()+(data.expires_in||3600)*1000,
+          email:(data.user&&data.user.email)||session.email
+        });
+        return session;
+      });
+    });
+  }
+  function signOut(){
+    var token=session&&session.access_token;
+    clearSession();
+    document.body.setAttribute("data-authed","false");
+    if(token){ authFetch("/logout",{method:"POST",headers:{"Authorization":"Bearer "+token}}).catch(function(){}); }
+  }
+  var session = loadSession();      // Supabase Auth session (set after login / restored on reload)
+
   var MONTHS = ["January","February","March","April","May","June",
                 "July","August","September","October","November","December"];
 
@@ -484,7 +585,8 @@
 
   /* ---------- Supabase REST helpers ---------- */
   function sbHeaders(extra){
-    var h={ "apikey":SB_KEY, "Authorization":"Bearer "+SB_KEY, "Content-Type":"application/json" };
+    var token=(session&&session.access_token)||SB_KEY;
+    var h={ "apikey":SB_KEY, "Authorization":"Bearer "+token, "Content-Type":"application/json" };
     if(extra){ for(var k in extra) h[k]=extra[k]; }
     return h;
   }
@@ -519,9 +621,10 @@
     }).then(function(r){ if(!r.ok) throw new Error("list "+r.status); return r.json(); });
   }
   function sbStorageUpload(path,file){
+    var token=(session&&session.access_token)||SB_KEY;
     return fetch(STORAGE+"/object/"+STORAGE_BUCKET+"/"+path,{
       method:"POST",
-      headers:{ "apikey":SB_KEY, "Authorization":"Bearer "+SB_KEY,
+      headers:{ "apikey":SB_KEY, "Authorization":"Bearer "+token,
                 "Content-Type":file.type||"application/octet-stream", "x-upsert":"true" },
       body:file
     }).then(function(r){ if(!r.ok) throw new Error("upload "+r.status); return r.json(); });
@@ -1048,9 +1151,56 @@
   if(tabRecordsBtn) tabRecordsBtn.addEventListener("click",function(){ setActiveTab("records"); });
 
   /* ---------- init ---------- */
-  fDate.value=new Date().toISOString().slice(0,10);
-  fillSites(); fillYears(); updateLineTotal();
-  loadEntries();
+  var appInited=false;
+  function initApp(){
+    if(appInited) return; appInited=true;
+    fDate.value=new Date().toISOString().slice(0,10);
+    fillSites(); fillYears(); updateLineTotal();
+    loadEntries();
+    setInterval(function(){
+      refreshSession().catch(function(){ showLoginGate("Your session expired. Please sign in again."); });
+    }, 45*60*1000);
+  }
+
+  function showLoginGate(msg){
+    document.body.setAttribute("data-authed","false");
+    if(msg){ loginError.textContent=msg; }
+  }
+  function showApp(){
+    document.body.setAttribute("data-authed","true");
+    authEmailEl.textContent=(session&&session.email)||"";
+    initApp();
+  }
+
+  var loginLogo=$("login-logo"), loginForm=$("login-form"), loginEmail=$("login-email"),
+      loginPassword=$("login-password"), loginSubmit=$("login-submit"), loginError=$("login-error"),
+      authEmailEl=$("auth-email"), btnLogout=$("btn-logout");
+  var mastLogoImg=document.querySelector(".mast-logo img");
+  if(loginLogo && mastLogoImg) loginLogo.src=mastLogoImg.src;
+
+  loginForm.addEventListener("submit",function(e){
+    e.preventDefault();
+    loginError.textContent="";
+    loginSubmit.disabled=true; loginSubmit.textContent="Signing in…";
+    signIn(loginEmail.value.trim(), loginPassword.value).then(function(){
+      loginPassword.value="";
+      showApp();
+    }).catch(function(err){
+      loginError.textContent=err.message||"Could not sign in. Check your email and password.";
+    }).then(function(){
+      loginSubmit.disabled=false; loginSubmit.textContent="Sign in";
+    });
+  });
+  btnLogout.addEventListener("click",function(){
+    signOut();
+    location.reload();
+  });
+
+  if(session && session.access_token){
+    refreshSession().then(showApp).catch(function(){ clearSession(); showLoginGate(); });
+  } else {
+    showLoginGate();
+  }
 })();
 </script>
 </body>
