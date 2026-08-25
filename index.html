@@ -1280,7 +1280,7 @@
   }
   
   var hashParams=parseHashParams();
-  if(hashParams.type==="recovery" && hashParams.access_token){
+  if((hashParams.type==="recovery"||hashParams.type==="invite"||hashParams.type==="signup") && hashParams.access_token){
     showRecoveryGate(hashParams.access_token);
   } else if(session && session.access_token){
     refreshSession().then(showApp).catch(function(){ clearSession(); showLoginGate(); });
