@@ -590,6 +590,23 @@
       });
     });
   }
+    /* Verifies a recovery/invite/signup/magiclink token_hash entirely via a background
+         request to Supabase's REST API -- the link the user actually clicks stays on our
+              own domain (myledgerpremier.org) the whole time, unlike Supabase's default
+                   ConfirmationURL links which point at the raw *.supabase.co project URL. That
+                        mismatch between the sending domain and the link's host is a common trigger for
+                             corporate email security gateways to quarantine the message, so this keeps the
+                                  visible link consistent with where the email was sent from. */
+    function verifyOtp(type,tokenHash){
+          return authFetch("/verify",{
+                  method:"POST", body:JSON.stringify({type:type, token_hash:tokenHash})
+          }).then(function(r){
+                  return r.json().then(function(data){
+                            if(!r.ok) throw new Error(data.error_description||data.msg||"This link is invalid or has expired.");
+                            return data;
+                  });
+          });
+    }
   function parseHashParams(){
     var h=location.hash.replace(/^#/,"");
     var out={};
@@ -600,6 +617,16 @@
     });
     return out;
   }
+    function parseQueryParams(){
+          var q=location.search.replace(/^\?/,"");
+          var out={};
+          q.split("&").forEach(function(p){
+                  if(!p) return;
+                  var kv=p.split("=");
+                  out[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||"");
+          });
+          return out;
+    }
   var session = loadSession();      // Supabase Auth session (set after login / restored on reload)
 
   var MONTHS = ["January","February","March","April","May","June",
@@ -1279,15 +1306,42 @@
     });
   }
   
-  var hashParams=parseHashParams();
-  if((hashParams.type==="recovery"||hashParams.type==="invite"||hashParams.type==="signup") && hashParams.access_token){
-    showRecoveryGate(hashParams.access_token);
-  } else if(session && session.access_token){
-    refreshSession().then(showApp).catch(function(){ clearSession(); showLoginGate(); });
-  } else {
-    showLoginGate();
-  }
-})();
+var hashParams=parseHashParams();
+    var queryParams=parseQueryParams();
+    if((hashParams.type==="recovery"||hashParams.type==="invite"||hashParams.type==="signup") && hashParams.access_token){
+          /* Legacy path: Supabase's default ConfirmationURL redirected here with the
+                 session already in the URL hash after verifying on supabase.co. */
+          showRecoveryGate(hashParams.access_token);
+    } else if((queryParams.type==="recovery"||queryParams.type==="invite"||queryParams.type==="signup") && queryParams.token_hash){
+          /* Current path: our custom email templates link straight to this page with
+                 ?token_hash=...&type=..., and verification happens via a background request
+                        below -- the address bar never shows supabase.co. */
+          verifyOtp(queryParams.type, queryParams.token_hash).then(function(data){
+                  history.replaceState(null,"",location.pathname);
+                  showRecoveryGate(data.access_token);
+          }).catch(function(err){
+                  history.replaceState(null,"",location.pathname);
+                  showLoginGate(err.message||"This link is invalid or has expired. Please request a new one.");
+          });
+    } else if(queryParams.type==="magiclink" && queryParams.token_hash){
+          verifyOtp("magiclink", queryParams.token_hash).then(function(data){
+                  history.replaceState(null,"",location.pathname);
+                  saveSession({
+                            access_token:data.access_token, refresh_token:data.refresh_token,
+                            expires_at:Date.now()+(data.expires_in||3600)*1000,
+                            email:(data.user&&data.user.email)||""
+                  });
+                  showApp();
+          }).catch(function(err){
+                  history.replaceState(null,"",location.pathname);
+                  showLoginGate(err.message||"This link is invalid or has expired. Please request a new one.");
+          });
+    } else if(session && session.access_token){
+          refreshSession().then(showApp).catch(function(){ clearSession(); showLoginGate(); });
+    } else {
+          showLoginGate();
+    }
+    })();
 </script>
 </body>
 </html>
