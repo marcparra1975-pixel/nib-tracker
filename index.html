@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Ledger AB1</title>
+<title>Ledger</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
@@ -243,7 +243,7 @@
 <body>
 <div id="login-gate">
   <div class="login-card">
-    <h1>Ledger AB1</h1>
+    <h1>Ledger</h1>
     <p class="login-sub">Sign in to view and edit procurement records.</p>
     <form id="login-form">
       <label for="login-email">Email</label>
@@ -256,14 +256,14 @@
     </form>
   </div>
 </div>
-  <div id="recovery-gate" style="position:fixed;inset:0;z-index:51;display:none;align-items:center;justify-content:center;background:linear-gradient(160deg, var(--pcsi-navy) 0%, var(--pcsi-navy-2) 55%, var(--pcsi-green) 100%);padding:20px;"><div class="login-card"><h1>Set a new password</h1><p class="login-sub">Choose a new password for your account.</p><form id="recovery-form"><label for="recovery-password">New password</label><input type="password" id="recovery-password" required minlength="6" autocomplete="new-password" /><button type="submit" id="recovery-submit">Set password</button><div class="login-error" id="recovery-error" role="alert"></div></form></div></div>
+  <div id="recovery-gate" style="position:fixed;inset:0;z-index:51;display:none;align-items:center;justify-content:center;background:linear-gradient(160deg, var(--pcsi-navy) 0%, var(--pcsi-navy-2) 55%, var(--pcsi-green) 100%);padding:20px;"><div class="login-card"><h1>Set a new password</h1><p class="login-sub">Choose a new password for your account.</p><form id="recovery-form"><label for="recovery-password">New password</label><input type="password" id="recovery-password" required minlength="8" autocomplete="new-password" /><button type="submit" id="recovery-submit">Set password</button><div class="login-error" id="recovery-error" role="alert"></div></form></div></div>
      <div class="wrap">
 
   <header class="mast">
     <div class="mast-row">
       <div class="mast-logo">
         <div>
-          <h1>Ledger AB1</h1>
+          <h1>Ledger</h1>
         </div>
       </div>
       <div class="picker">
@@ -287,6 +287,7 @@
       <div class="site-actions">
         <span class="site-count" id="auth-email"></span>
         <button class="site-btn" id="btn-refresh">&#8635; Refresh</button>
+                <button class="site-btn" id="btn-changepw">Change password</button>
         <button class="site-btn" id="btn-logout">Log out</button>
       </div>
     </div>
@@ -1206,7 +1207,7 @@
 
   var loginLogo=$("login-logo"), loginForm=$("login-form"), loginEmail=$("login-email"),
       loginPassword=$("login-password"), loginSubmit=$("login-submit"), loginError=$("login-error"),
-      authEmailEl=$("auth-email"), btnLogout=$("btn-logout");
+      authEmailEl=$("auth-email"), btnLogout=$("btn-logout"), btnChangePw=$("btn-changepw");
   var mastLogoImg=document.querySelector(".mast-logo img");
   if(loginLogo && mastLogoImg) loginLogo.src=mastLogoImg.src;
 
@@ -1227,6 +1228,18 @@
     signOut();
     location.reload();
   });
+      if(btnChangePw){
+        btnChangePw.addEventListener("click",function(){
+                                            var pw=prompt("Enter a new password (at least 8 characters):");
+                if(!pw) return;
+                  if(pw.length<8){ alert("Password must be at least 8 characters."); return; }
+                  updatePasswordWithToken(session.access_token, pw).then(function(){
+                              alert("Password updated.");
+                  }).catch(function(err){
+            alert(err.message||"Could not update password.");
+  });
+  });
+  }
 
   /* ---------- forgot / reset password wiring ---------- */
   var loginForgot=$("login-forgot"), recoveryGate=$("recovery-gate"), recoveryForm=$("recovery-form"),
