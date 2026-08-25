@@ -252,6 +252,8 @@
       <input type="password" id="login-password" required autocomplete="current-password" />
       <button type="submit" id="login-submit">Sign in</button>
       <div class="login-error" id="login-error" role="alert"></div>
+      <div style="margin-top:14px;"><a href="#" id="login-forgot" style="color:var(--brass);font-size:12.5px;">Forgot password?</a></div>
+      <div id="recovery-gate" style="position:fixed;inset:0;z-index:51;display:none;align-items:center;justify-content:center;background:linear-gradient(160deg, var(--pcsi-navy) 0%, var(--pcsi-navy-2) 55%, var(--pcsi-green) 100%);padding:20px;"><div class="login-card"><h1>Set a new password</h1><p class="login-sub">Choose a new password for your account.</p><form id="recovery-form"><label for="recovery-password">New password</label><input type="password" id="recovery-password" required minlength="6" autocomplete="new-password" /><button type="submit" id="recovery-submit">Set password</button><div class="login-error" id="recovery-error" role="alert"></div></form></div></div>
     </form>
   </div>
 </div>
@@ -562,6 +564,40 @@
     clearSession();
     document.body.setAttribute("data-authed","false");
     if(token){ authFetch("/logout",{method:"POST",headers:{"Authorization":"Bearer "+token}}).catch(function(){}); }
+  }
+  /* ---------- Supabase Auth (forgot / reset password) ---------- */
+  function sendRecovery(email){
+    return authFetch("/recover",{
+      method:"POST", body:JSON.stringify({email:email})
+    }).then(function(r){
+      if(!r.ok){
+            return r.json().catch(function(){ return {}; }).then(function(data){
+              throw new Error(data.error_description||data.msg||"Could not send reset email");
+            });
+      }
+    });
+  }
+  function updatePasswordWithToken(token,newPassword){
+    return fetch(AUTH_URL+"/user",{
+      method:"PUT",
+      headers:{ "apikey":SB_KEY, "Authorization":"Bearer "+token, "Content-Type":"application/json" },
+      body:JSON.stringify({password:newPassword})
+    }).then(function(r){
+      return r.json().then(function(data){
+        if(!r.ok) throw new Error(data.error_description||data.msg||"Could not set new password");
+        return data;
+      });
+    });
+  }
+  function parseHashParams(){
+    var h=location.hash.replace(/^#/,"");
+    var out={};
+    h.split("&").forEach(function(p){
+      if(!p) return;
+      var kv=p.split("=");
+      out[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||"");
+    });
+    return out;
   }
   var session = loadSession();      // Supabase Auth session (set after login / restored on reload)
 
@@ -1192,7 +1228,48 @@
     location.reload();
   });
 
-  if(session && session.access_token){
+  /* ---------- forgot / reset password wiring ---------- */
+  var loginForgot=$("login-forgot"), recoveryGate=$("recovery-gate"), recoveryForm=$("recovery-form"),
+    recoveryPassword=$("recovery-password"), recoverySubmit=$("recovery-submit"), recoveryError=$("recovery-error");
+  
+  if(loginForgot){
+    loginForgot.addEventListener("click",function(e){
+      e.preventDefault();
+      loginError.textContent="";
+      var email=prompt("Enter your account email to receive a password reset link:", loginEmail.value.trim());
+      if(!email) return;
+      sendRecovery(email.trim()).then(function(){
+        alert("If an account exists for "+email.trim()+", a password reset email has been sent. Check inbox and spam.");
+      }).catch(function(err){
+        alert(err.message||"Could not send reset email. Please try again.");
+      });
+    });
+  }
+  
+  function showRecoveryGate(token){
+    document.body.setAttribute("data-authed","false");
+    recoveryGate.style.display="flex";
+    recoveryForm.addEventListener("submit",function submitOnce(e){
+      e.preventDefault();
+      recoveryError.textContent="";
+      recoverySubmit.disabled=true; recoverySubmit.textContent="Saving...";
+      updatePasswordWithToken(token, recoveryPassword.value).then(function(){
+        history.replaceState(null,"",location.pathname+location.search);
+        recoveryGate.style.display="none";
+        alert("Password set. Please sign in with your new password.");
+        showLoginGate();
+      }).catch(function(err){
+        recoveryError.textContent=err.message||"Could not set new password. The link may have expired -- request a new one.";
+      }).then(function(){
+        recoverySubmit.disabled=false; recoverySubmit.textContent="Set password";
+      });
+    });
+  }
+  
+  var hashParams=parseHashParams();
+  if(hashParams.type==="recovery" && hashParams.access_token){
+    showRecoveryGate(hashParams.access_token);
+  } else if(session && session.access_token){
     refreshSession().then(showApp).catch(function(){ clearSession(); showLoginGate(); });
   } else {
     showLoginGate();
