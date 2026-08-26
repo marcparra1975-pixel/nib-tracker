@@ -257,6 +257,7 @@
   </div>
 </div>
   <div id="recovery-gate" style="position:fixed;inset:0;z-index:51;display:none;align-items:center;justify-content:center;background:linear-gradient(160deg, var(--pcsi-navy) 0%, var(--pcsi-navy-2) 55%, var(--pcsi-green) 100%);padding:20px;"><div class="login-card"><h1>Set a new password</h1><p class="login-sub">Choose a new password for your account.</p><form id="recovery-form"><label for="recovery-password">New password</label><input type="password" id="recovery-password" required minlength="8" autocomplete="new-password" /><button type="submit" id="recovery-submit">Set password</button><div class="login-error" id="recovery-error" role="alert"></div></form></div></div>
+  <div id="confirm-gate" style="position:fixed;inset:0;z-index:51;display:none;align-items:center;justify-content:center;background:linear-gradient(160deg, var(--pcsi-navy) 0%, var(--pcsi-navy-2) 55%, var(--pcsi-green) 100%);padding:20px;"><div class="login-card"><h1 id="confirm-title">Continue</h1><p class="login-sub" id="confirm-sub">Click below to continue.</p><button type="button" id="confirm-btn" style="width:100%;margin-top:6px;padding:11px 14px;border:none;border-radius:8px;background:var(--pcsi-navy);color:#fff;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;">Continue</button><div class="login-error" id="confirm-error" role="alert"></div></div></div>
      <div class="wrap">
 
   <header class="mast">
@@ -1271,6 +1272,8 @@
   /* ---------- forgot / reset password wiring ---------- */
   var loginForgot=$("login-forgot"), recoveryGate=$("recovery-gate"), recoveryForm=$("recovery-form"),
     recoveryPassword=$("recovery-password"), recoverySubmit=$("recovery-submit"), recoveryError=$("recovery-error");
+  var confirmGate=$("confirm-gate"), confirmTitle=$("confirm-title"), confirmSub=$("confirm-sub"),
+    confirmBtn=$("confirm-btn"), confirmError=$("confirm-error");
   
   if(loginForgot){
     loginForgot.addEventListener("click",function(e){
@@ -1305,37 +1308,63 @@
       });
     });
   }
-  
+
+  /* Corporate email security systems (e.g. Microsoft Defender for Office 365 Safe
+     Links) commonly open every link in an incoming email within seconds of delivery
+     to scan it for phishing/malware -- before the real recipient ever sees it. Our
+     recovery/invite/signup/magic-link tokens are single-use, so if we verified them
+     automatically as soon as this page loaded, that background scan would silently
+     burn the token and the real person's click would fail with "invalid or expired".
+     Showing this confirmation screen and only calling verifyOtp() from a real button
+     click means an automated scanner that merely renders the page no longer consumes
+     the token -- only an actual click does. */
+  function showConfirmGate(type, tokenHash){
+    document.body.setAttribute("data-authed","false");
+    var copy={
+      recovery:{title:"Reset your password", sub:"Click below to continue resetting your password.", btn:"Continue to reset password"},
+      invite:{title:"Accept invitation", sub:"Click below to continue creating your account.", btn:"Continue to accept invitation"},
+      signup:{title:"Confirm your email", sub:"Click below to confirm your email address.", btn:"Continue to confirm email"},
+      magiclink:{title:"Sign in", sub:"Click below to continue signing in.", btn:"Continue to sign in"}
+    }[type] || {title:"Continue", sub:"Click below to continue.", btn:"Continue"};
+    confirmTitle.textContent=copy.title;
+    confirmSub.textContent=copy.sub;
+    confirmBtn.textContent=copy.btn;
+    confirmError.textContent="";
+    confirmBtn.disabled=false;
+    confirmGate.style.display="flex";
+    confirmBtn.onclick=function(){
+      confirmBtn.disabled=true; confirmBtn.textContent="Please wait...";
+      verifyOtp(type, tokenHash).then(function(data){
+        history.replaceState(null,"",location.pathname);
+        confirmGate.style.display="none";
+        if(type==="magiclink"){
+          saveSession({
+            access_token:data.access_token, refresh_token:data.refresh_token,
+            expires_at:Date.now()+(data.expires_in||3600)*1000,
+            email:(data.user&&data.user.email)||""
+          });
+          showApp();
+        } else {
+          showRecoveryGate(data.access_token);
+        }
+      }).catch(function(err){
+        confirmError.textContent=err.message||"This link is invalid or has expired. Please request a new one.";
+        confirmBtn.disabled=false; confirmBtn.textContent=copy.btn;
+      });
+    };
+  }
+
 var hashParams=parseHashParams();
     var queryParams=parseQueryParams();
     if((hashParams.type==="recovery"||hashParams.type==="invite"||hashParams.type==="signup") && hashParams.access_token){
           /* Legacy path: Supabase's default ConfirmationURL redirected here with the
                  session already in the URL hash after verifying on supabase.co. */
           showRecoveryGate(hashParams.access_token);
-    } else if((queryParams.type==="recovery"||queryParams.type==="invite"||queryParams.type==="signup") && queryParams.token_hash){
+    } else if((queryParams.type==="recovery"||queryParams.type==="invite"||queryParams.type==="signup"||queryParams.type==="magiclink") && queryParams.token_hash){
           /* Current path: our custom email templates link straight to this page with
-                 ?token_hash=...&type=..., and verification happens via a background request
-                        below -- the address bar never shows supabase.co. */
-          verifyOtp(queryParams.type, queryParams.token_hash).then(function(data){
-                  history.replaceState(null,"",location.pathname);
-                  showRecoveryGate(data.access_token);
-          }).catch(function(err){
-                  history.replaceState(null,"",location.pathname);
-                  showLoginGate(err.message||"This link is invalid or has expired. Please request a new one.");
-          });
-    } else if(queryParams.type==="magiclink" && queryParams.token_hash){
-          verifyOtp("magiclink", queryParams.token_hash).then(function(data){
-                  history.replaceState(null,"",location.pathname);
-                  saveSession({
-                            access_token:data.access_token, refresh_token:data.refresh_token,
-                            expires_at:Date.now()+(data.expires_in||3600)*1000,
-                            email:(data.user&&data.user.email)||""
-                  });
-                  showApp();
-          }).catch(function(err){
-                  history.replaceState(null,"",location.pathname);
-                  showLoginGate(err.message||"This link is invalid or has expired. Please request a new one.");
-          });
+                 ?token_hash=...&type=.... We don't verify it until the person actually
+                        clicks the Continue button on showConfirmGate -- see the comment there. */
+          showConfirmGate(queryParams.type, queryParams.token_hash);
     } else if(session && session.access_token){
           refreshSession().then(showApp).catch(function(){ clearSession(); showLoginGate(); });
     } else {
