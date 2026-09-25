@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EACH Trainer Planner</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#1c2230;--mute:#667085;--line:#e3e6eb;--accent:#1f6f4a;--accent2:#e8f3ee;--warn:#b54708;--bad:#b42318}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{background:var(--accent);color:#fff;padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+header h1{font-size:17px;margin:0}
+header .sub{font-size:12px;opacity:.85}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+label{font-size:12px;color:var(--mute);display:block;margin-bottom:3px}
+input,select,textarea{font:inherit;width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}
+textarea{min-height:60px;resize:vertical}
+button{font:inherit;border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px 12px;cursor:pointer}
+button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.link{border:none;background:none;color:inherit;text-decoration:underline;padding:4px}
+button.x{border:none;background:none;color:var(--bad);font-size:18px;line-height:1;padding:2px 6px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.stat{background:var(--accent2);border-radius:8px;padding:10px 12px}
+.stat b{display:block;font-size:22px}
+.stat span{font-size:12px;color:var(--mute)}
+.week h3{margin:0 0 10px;font-size:15px;display:flex;justify-content:space-between;align-items:center}
+.sess{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;position:relative}
+.sess .wide{grid-column:1/-1}
+.sess .del{position:absolute;top:4px;right:4px}
+.empty{color:var(--mute);font-style:italic;margin:4px 0 10px}
+#status{font-size:12px}
+.hidden{display:none!important}
+#login{max-width:360px;margin:60px auto}
+#login h2{margin-top:0}
+.err{color:var(--bad);font-size:13px;min-height:18px}
+.st-Completed{border-left:4px solid var(--accent)}
+.st-Planned{border-left:4px solid #98a2b3}
+.st-Cancelled{border-left:4px solid var(--bad);opacity:.75}
+.st-Rescheduled{border-left:4px solid var(--warn)}
+@media print{
+  header .ctrl,.noprint,button{display:none!important}
+  body{background:#fff}
+  .card{border:none;padding:6px 0;break-inside:avoid}
+  input,select,textarea{border:none;padding:0;resize:none}
+  header{background:#fff;color:#000;border-bottom:2px solid #000}
+}
+</style>
+</head>
+<body>
+
+<div id="login" class="card hidden">
+  <h2>EACH Trainer Planner</h2>
+  <p style="color:var(--mute);margin-top:-6px">PCSI Housekeeping · Evans Army Community Hospital</p>
+  <label>Email</label><input id="em" type="email" autocomplete="username">
+  <div style="height:10px"></div>
+  <label>Password</label><input id="pw" type="password" autocomplete="current-password">
+  <div style="height:12px"></div>
+  <button class="pri" id="loginBtn" style="width:100%">Sign in</button>
+  <div class="err" id="loginErr"></div>
+</div>
+
+<div id="app" class="hidden">
+<header>
+  <div>
+    <h1>EACH Healthcare Housekeeping Training Plan</h1>
+    <div class="sub">PCSI · Contract HT940824D0024_2026 TO 10252 · PWS 1.6.1</div>
+  </div>
+  <div class="row ctrl">
+    <input id="month" type="month" style="width:auto">
+    <span id="status">…</span>
+    <span id="who" class="sub"></span>
+    <button class="link" id="refreshBtn">Refresh</button>
+    <button class="link" id="pwBtn">Change password</button>
+    <button class="link" id="outBtn">Log out</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px">
+      <h2 style="margin:0;font-size:18px" id="monthTitle"></h2>
+      <div class="row noprint">
+        <button id="csvBtn">↓ CSV</button>
+        <button id="printBtn">Print / PDF</button>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div class="card">
+    <div class="grid2">
+      <div><label>Monthly theme / focus</label><input data-m="theme"></div>
+      <div><label>Prepared by</label><input data-m="preparedBy"></div>
+      <div><label>Approved by (COR / Manager)</label><input data-m="approvedBy"></div>
+    </div>
+    <div style="height:10px"></div>
+    <label>Training objectives</label><textarea data-m="objectives"></textarea>
+    <div style="height:10px"></div>
+    <label>Notes</label><textarea data-m="notes"></textarea>
+  </div>
+
+  <div id="weeks"></div>
+</div>
+</div>
+
+<datalist id="topics">
+  <option>Hand Hygiene & Infection Prevention</option>
+  <option>Bloodborne Pathogens (OSHA 1910.1030)</option>
+  <option>PPE Donning & Doffing</option>
+  <option>Isolation Room Cleaning (Contact / Droplet / Airborne)</option>
+  <option>C. diff & Sporicidal Disinfection</option>
+  <option>Terminal / Discharge Cleaning</option>
+  <option>OR / Procedure Room Turnover</option>
+  <option>Chemical Safety & SDS (HazCom)</option>
+  <option>Disinfectant Dwell / Contact Times</option>
+  <option>Regulated Medical Waste & Sharps</option>
+  <option>Linen Handling</option>
+  <option>Floor Care & Wet Floor Safety</option>
+  <option>Fire Safety (RACE / PASS)</option>
+  <option>Body Mechanics & Safe Lifting</option>
+  <option>Equipment Cleaning & Color-Coded Microfiber</option>
+  <option>Customer Service & Patient Privacy</option>
+  <option>Workplace Violence Prevention</option>
+  <option>Emergency Codes & Response</option>
+</datalist>
+
+<script>
+const SUPABASE_URL = "https://cmglzngevatkjwtwyxnb.supabase.co";
+const SUPABASE_KEY = "sb_publishable_mnVHxB09Db-PG9ToKVAFKw_7hIp4N64";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const $ = s => document.querySelector(s);
+const STATUSES = ["Planned","Completed","Rescheduled","Cancelled"];
+let user = null, ym = "", monthDoc = {}, weekDocs = {}, timers = {}, pending = 0;
+
+function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function uid(){return Math.random().toString(36).slice(2,10)}
+function dim(y,m){return new Date(y,m,0).getDate()}
+function weekCount(){const [y,m]=ym.split("-").map(Number);return Math.ceil(dim(y,m)/7)}
+function weekRange(n){const [y,m]=ym.split("-").map(Number);const a=7*n-6,b=Math.min(7*n,dim(y,m));const p=d=>`${ym}-${String(d).padStart(2,"0")}`;return [p(a),p(b)]}
+function fmt(d){if(!d)return"";const [y,m,dd]=d.split("-");return `${m}/${dd}`}
+function setStatus(t,c){const s=$("#status");s.textContent=t;s.style.color=c||"inherit"}
+
+// ---------- auth ----------
+async function init(){
+  const now=new Date();ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  $("#month").value=ym;
+  const {data}=await sb.auth.getSession();
+  if(data.session){user=data.session.user;showApp()}else showLogin();
+}
+function showLogin(){$("#login").classList.remove("hidden");$("#app").classList.add("hidden")}
+function showApp(){$("#login").classList.add("hidden");$("#app").classList.remove("hidden");$("#who").textContent=user.email;load()}
+
+$("#loginBtn").onclick=async()=>{
+  $("#loginErr").textContent="";
+  const {data,error}=await sb.auth.signInWithPassword({email:$("#em").value.trim(),password:$("#pw").value});
+  if(error){$("#loginErr").textContent=error.message;return}
+  user=data.user;$("#pw").value="";showApp();
+};
+$("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")$("#loginBtn").click()});
+$("#outBtn").onclick=async()=>{await sb.auth.signOut();user=null;showLogin()};
+$("#pwBtn").onclick=async()=>{
+  const p=prompt("New password (min 8 characters):");if(!p)return;
+  if(p.length<8){alert("Password must be at least 8 characters.");return}
+  const {error}=await sb.auth.updateUser({password:p});
+  alert(error?("Error: "+error.message):"Password changed.");
+};
+
+// ---------- data ----------
+async function load(){
+  setStatus("Loading…");
+  const paths=[`months/${ym}`];for(let n=1;n<=weekCount();n++)paths.push(`weeks/${ym}-w${n}`);
+  const {data,error}=await sb.from("planner_docs").select("path,data").in("path",paths);
+  if(error){setStatus("Load error: "+error.message,"var(--bad)");return}
+  monthDoc={};weekDocs={};
+  for(let n=1;n<=weekCount();n++)weekDocs[n]={sessions:[]};
+  for(const r of data){
+    if(r.path.startsWith("months/"))monthDoc=r.data||{};
+    else{const n=+r.path.split("-w")[1];weekDocs[n]=Object.assign({sessions:[]},r.data)}
+  }
+  render();setStatus("☁ Saved","var(--accent)");
+}
+function save(path,data){
+  clearTimeout(timers[path]);setStatus("Saving…","var(--warn)");
+  timers[path]=setTimeout(async()=>{
+    pending++;
+    const {error}=await sb.from("planner_docs").upsert({path,data,updated_at:new Date().toISOString(),updated_by:user.id},{onConflict:"path"});
+    pending--;
+    if(error)setStatus("Save failed: "+error.message,"var(--bad)");
+    else if(!pending)setStatus("☁ Saved","var(--accent)");
+  },700);
+}
+const saveMonth=()=>save(`months/${ym}`,monthDoc);
+const saveWeek=n=>save(`weeks/${ym}-w${n}`,weekDocs[n]);
+
+// ---------- render ----------
+function render(){
+  const [y,m]=ym.split("-").map(Number);
+  $("#monthTitle").textContent=new Date(y,m-1,1).toLocaleString("en-US",{month:"long",year:"numeric"});
+  document.querySelectorAll("[data-m]").forEach(el=>el.value=monthDoc[el.dataset.m]||"");
+  let h="";
+  for(let n=1;n<=weekCount();n++){
+    const [a,b]=weekRange(n),ss=weekDocs[n].sessions;
+    h+=`<div class="card week"><h3><span>Week ${n} <span style="color:var(--mute);font-weight:400">· ${fmt(a)} – ${fmt(b)}</span></span>
+      <button class="noprint" data-add="${n}">+ Add session</button></h3>`;
+    if(!ss.length)h+=`<div class="empty">No sessions planned.</div>`;
+    ss.forEach(s=>{
+      h+=`<div class="sess st-${esc(s.status)}" data-w="${n}" data-id="${s.id}">
+        <button class="x del noprint" title="Remove" data-del="1">×</button>
+        <div><label>Date</label><input type="date" min="${a}" max="${b}" data-f="date" value="${esc(s.date)}"></div>
+        <div><label>Time</label><input type="time" data-f="time" value="${esc(s.time)}"></div>
+        <div class="wide"><label>Topic</label><input list="topics" data-f="topic" value="${esc(s.topic)}"></div>
+        <div><label>Trainer</label><input data-f="trainer" value="${esc(s.trainer)}"></div>
+        <div><label>Location</label><input data-f="location" value="${esc(s.location)}"></div>
+        <div><label>Audience / shift</label><input data-f="audience" value="${esc(s.audience)}"></div>
+        <div><label>Duration (min)</label><input type="number" min="0" data-f="duration" value="${esc(s.duration)}"></div>
+        <div><label>Attendees</label><input type="number" min="0" data-f="attendees" value="${esc(s.attendees)}"></div>
+        <div><label>Status</label><select data-f="status">${STATUSES.map(x=>`<option${x===s.status?" selected":""}>${x}</option>`).join("")}</select></div>
+        <div class="wide"><label>Notes</label><input data-f="notes" value="${esc(s.notes)}"></div>
+      </div>`;
+    });
+    h+=`</div>`;
+  }
+  $("#weeks").innerHTML=h;
+  stats();
+}
+function allSessions(){return Object.values(weekDocs).flatMap(w=>w.sessions)}
+function stats(){
+  const ss=allSessions(),done=ss.filter(s=>s.status==="Completed");
+  const att=done.reduce((t,s)=>t+(+s.attendees||0),0);
+  const hrs=done.reduce((t,s)=>t+(+s.duration||0),0)/60;
+  const pct=ss.length?Math.round(done.length/ss.filter(s=>s.status!=="Cancelled").length*100)||0:0;
+  $("#stats").innerHTML=[
+    [ss.length,"Sessions planned"],[done.length,"Completed"],[pct+"%","Completion rate"],
+    [att,"Attendees trained"],[hrs.toFixed(1),"Training hours"]
+  ].map(([v,l])=>`<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
+}
+
+// ---------- events ----------
+document.querySelectorAll("[data-m]").forEach(el=>el.addEventListener("input",()=>{monthDoc[el.dataset.m]=el.value;saveMonth()}));
+$("#weeks").addEventListener("click",e=>{
+  const add=e.target.dataset.add;
+  if(add){const [a]=weekRange(+add);weekDocs[add].sessions.push({id:uid(),date:a,time:"",topic:"",trainer:"",location:"",audience:"",duration:"",attendees:"",status:"Planned",notes:""});saveWeek(add);render();return}
+  if(e.target.dataset.del){
+    const c=e.target.closest(".sess"),n=c.dataset.w;
+    if(!confirm("Remove this session?"))return;
+    weekDocs[n].sessions=weekDocs[n].sessions.filter(s=>s.id!==c.dataset.id);saveWeek(n);render();
+  }
+});
+$("#weeks").addEventListener("input",e=>{
+  const f=e.target.dataset.f;if(!f)return;
+  const c=e.target.closest(".sess"),n=c.dataset.w,s=weekDocs[n].sessions.find(x=>x.id===c.dataset.id);
+  s[f]=e.target.value;
+  if(f==="status")c.className=`sess st-${s.status}`;
+  saveWeek(n);stats();
+});
+$("#month").onchange=e=>{if(e.target.value){ym=e.target.value;load()}};
+$("#refreshBtn").onclick=load;
+$("#printBtn").onclick=()=>window.print();
+$("#csvBtn").onclick=()=>{
+  const cols=["week","date","time","topic","trainer","location","audience","duration","attendees","status","notes"];
+  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const rows=[cols.join(",")];
+  for(const [n,w] of Object.entries(weekDocs))w.sessions.forEach(s=>rows.push(cols.map(c=>q(c==="week"?n:s[c])).join(",")));
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));
+  a.download=`EACH-training-plan-${ym}.csv`;a.click();
+};
+sb.auth.onAuthStateChange((ev,session)=>{if(ev==="SIGNED_OUT"){user=null;showLogin()}});
+init();
+</script>
+</body>
+</html>
