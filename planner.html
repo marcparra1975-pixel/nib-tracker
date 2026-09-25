@@ -2,276 +2,532 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EACH Trainer Planner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>EACH Trainer Weekly Planner — Site 570</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>
+/* ===== EDIT THESE TWO LINES (Supabase > Project Settings > API) ===== */
+window.PLANNER_CONFIG = {
+  SUPABASE_URL: "https://cmglzngevatkjwtwyxnb.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_mnVHxB09Db-PG9ToKVAFKw_7hIp4N64"
+};
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-:root{--bg:#f5f6f8;--card:#fff;--ink:#1c2230;--mute:#667085;--line:#e3e6eb;--accent:#1f6f4a;--accent2:#e8f3ee;--warn:#b54708;--bad:#b42318}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-header{background:var(--accent);color:#fff;padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
-header h1{font-size:17px;margin:0}
-header .sub{font-size:12px;opacity:.85}
-.wrap{max-width:1100px;margin:0 auto;padding:16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
-.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
-label{font-size:12px;color:var(--mute);display:block;margin-bottom:3px}
-input,select,textarea{font:inherit;width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}
-textarea{min-height:60px;resize:vertical}
-button{font:inherit;border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px 12px;cursor:pointer}
-button.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
-button.link{border:none;background:none;color:inherit;text-decoration:underline;padding:4px}
-button.x{border:none;background:none;color:var(--bad);font-size:18px;line-height:1;padding:2px 6px}
-.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
-.stat{background:var(--accent2);border-radius:8px;padding:10px 12px}
-.stat b{display:block;font-size:22px}
-.stat span{font-size:12px;color:var(--mute)}
-.week h3{margin:0 0 10px;font-size:15px;display:flex;justify-content:space-between;align-items:center}
-.sess{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;position:relative}
-.sess .wide{grid-column:1/-1}
-.sess .del{position:absolute;top:4px;right:4px}
-.empty{color:var(--mute);font-style:italic;margin:4px 0 10px}
-#status{font-size:12px}
+:root{
+  --paper:#f7f8f6; --card:#ffffff; --ink:#1c2830; --muted:#5b6a72; --rule:#d7ddd9;
+  --accent:#2c6b5b; --accent-soft:#e3efeb; --warn:#9a6212; --warn-soft:#fbf0dc;
+  --danger:#a13a2f; --field:#fbfcfb; --holiday:#f1ecf6; --holiday-ink:#5d3f7a;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#141b1f; --card:#1c252a; --ink:#e6ecea; --muted:#9aaab0; --rule:#2e3a40;
+    --accent:#6cc0a8; --accent-soft:#1f3630; --warn:#e2b25e; --warn-soft:#3a2f1a;
+    --danger:#ec8a7e; --field:#172024; --holiday:#2a2233; --holiday-ink:#cfb6e8;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#141b1f; --card:#1c252a; --ink:#e6ecea; --muted:#9aaab0; --rule:#2e3a40;
+  --accent:#6cc0a8; --accent-soft:#1f3630; --warn:#e2b25e; --warn-soft:#3a2f1a;
+  --danger:#ec8a7e; --field:#172024; --holiday:#2a2233; --holiday-ink:#cfb6e8;
+  color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Public Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:15px;line-height:1.45}
+.wrap{max-width:1280px;margin:0 auto;padding:20px 20px 60px}
+h1{font-size:26px;font-weight:800;letter-spacing:-.01em;margin:0}
+h2{font-size:17px;font-weight:700;margin:0 0 10px}
+.sub{color:var(--muted);margin:2px 0 0}
+header.top{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between;border-bottom:3px solid var(--ink);padding-bottom:14px;margin-bottom:18px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+label.f{display:flex;flex-direction:column;font-size:12px;font-weight:600;color:var(--muted);gap:4px}
+select,input,textarea{font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--rule);border-radius:6px;padding:7px 9px;min-width:0}
+select:focus,input:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+textarea{width:100%;resize:vertical;min-height:70px}
+button{font:inherit;font-weight:600;border-radius:6px;border:1px solid var(--ink);background:var(--ink);color:var(--paper);padding:8px 14px;cursor:pointer}
+button.ghost{background:transparent;color:var(--ink);border-color:var(--rule)}
+button.x{background:transparent;color:var(--danger);border:none;padding:4px 8px}
+.save{font-size:12px;color:var(--muted);min-height:16px}
+.weekline{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;margin:0 0 14px}
+.weekline .dates{font-size:20px;font-weight:700}
+.theme{color:var(--accent);font-weight:600}
+.onb{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px}
+.onb input{width:18px;height:18px}
+
+.topics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--rule);border-radius:8px;background:var(--card);overflow:hidden;margin-bottom:20px}
+.topic{padding:12px 14px;border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:6px}
+.topic:last-child{border-right:none}
+.topic .k{font-size:12px;font-weight:600;color:var(--muted)}
+.topic .v{font-weight:700;font-size:15px;min-height:22px}
+.topic .owner{font-size:12px;color:var(--warn)}
+.topic select{font-size:13px;padding:5px 7px}
+
+.days{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:22px}
+.day{background:var(--card);border:1px solid var(--rule);border-top:4px solid var(--accent);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.day.out{opacity:.55}
+.day.hol{border-top-color:var(--holiday-ink);background:var(--holiday)}
+.day .dh{display:flex;justify-content:space-between;align-items:baseline}
+.day .dn{font-weight:800;font-size:15px}
+.day .dd{color:var(--muted);font-size:13px}
+.day .tag{font-size:11px;font-weight:700;color:var(--holiday-ink)}
+.day label.f{font-size:11px}
+.day select{font-size:13px;width:100%}
+.status-done{border-color:var(--accent)!important;background:var(--accent-soft)!important}
+.status-late{border-color:var(--warn)!important;background:var(--warn-soft)!important}
+
+section.block{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:14px 16px;margin-bottom:18px}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:860px;font-size:13px}
+th{font-size:12px;text-align:left;color:var(--muted);font-weight:600;padding:6px;border-bottom:2px solid var(--rule)}
+td{padding:4px 6px;border-bottom:1px solid var(--rule);vertical-align:middle}
+td input,td select{width:100%;font-size:13px;padding:5px 6px}
+td.num input{width:70px}
+.totals{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:12px;font-size:13px}
+.totals b{font-size:15px}
+.totals .all{margin-left:auto;font-weight:700}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.checks label{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.checks input{width:18px;height:18px;margin-top:1px;flex:none}
+.due{font-size:13px;color:var(--warn);font-weight:600;margin:-4px 0 10px}
+.printnote{display:none;white-space:pre-wrap;font-size:11px;min-height:18px}
+.printonly{display:none}
+footer{color:var(--muted);font-size:12px;margin-top:10px}
+#login{max-width:380px;margin:12vh auto;background:var(--card);border:1px solid var(--rule);border-top:4px solid var(--accent);border-radius:8px;padding:24px}
+#login h1{font-size:22px;margin-bottom:4px}
+#login form{display:grid;gap:12px;margin-top:16px}
+#login input{width:100%}
+#loginMsg{font-size:13px;color:var(--danger);min-height:18px;margin:0}
+.who{font-size:12px;color:var(--muted)}
 .hidden{display:none!important}
-#login{max-width:360px;margin:60px auto}
-#login h2{margin-top:0}
-.err{color:var(--bad);font-size:13px;min-height:18px}
-.st-Completed{border-left:4px solid var(--accent)}
-.st-Planned{border-left:4px solid #98a2b3}
-.st-Cancelled{border-left:4px solid var(--bad);opacity:.75}
-.st-Rescheduled{border-left:4px solid var(--warn)}
+
+@media (max-width:980px){
+  .days{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .topics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .topic:nth-child(2){border-right:none}
+  .topic:nth-child(-n+2){border-bottom:1px solid var(--rule)}
+  .row2{grid-template-columns:1fr}
+}
+@media (max-width:560px){
+  .days{grid-template-columns:1fr}
+  .topics{grid-template-columns:1fr}
+  .topic{border-right:none;border-bottom:1px solid var(--rule)}
+  h1{font-size:22px}
+}
+
 @media print{
-  header .ctrl,.noprint,button{display:none!important}
-  body{background:#fff}
-  .card{border:none;padding:6px 0;break-inside:avoid}
-  input,select,textarea{border:none;padding:0;resize:none}
-  header{background:#fff;color:#000;border-bottom:2px solid #000}
+  @page{size:letter landscape;margin:.35in}
+  :root{--paper:#fff;--card:#fff;--ink:#000;--muted:#333;--rule:#999;--field:#fff;padding:0}
+  body{font-size:10.5px;background:#fff}
+  .wrap{max-width:none;padding:0}
+  .noprint,.save,button{display:none!important}
+  .printonly{display:block}
+  header.top{padding-bottom:6px;margin-bottom:8px;border-bottom-width:2px}
+  h1{font-size:16px}
+  h2{font-size:12px;margin-bottom:4px}
+  .weekline{margin-bottom:6px}.weekline .dates{font-size:13px}
+  select,input{border:none;background:none;padding:0;appearance:none;-webkit-appearance:none;font-size:10.5px}
+  textarea{display:none}
+  .printnote{display:block;border:1px solid #bbb;border-radius:4px;padding:4px;min-height:60px}
+  .topics{grid-template-columns:repeat(4,1fr);margin-bottom:8px}
+  .topic{padding:6px 8px;border-right:1px solid var(--rule)!important;border-bottom:none!important}
+  .topic .v{font-size:11px}
+  .days{grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:8px}
+  .day{padding:6px;gap:4px;break-inside:avoid;opacity:1!important}
+  .day select{font-size:10px}
+  section.block{padding:6px 8px;margin-bottom:8px;break-inside:avoid}
+  table{min-width:0;font-size:10px}
+  td{padding:2px 4px}
+  .row2{grid-template-columns:1fr 1fr;gap:8px}
+  .checks{gap:2px}.checks input{width:12px;height:12px}
+  .status-done,.status-late{background:none!important}
+  footer{display:none}
+  .sig{display:flex;gap:40px;margin-top:10px;font-size:10px}
+  .sig span{border-top:1px solid #000;padding-top:2px;min-width:200px}
 }
 </style>
 </head>
 <body>
-
-<div id="login" class="card hidden">
-  <h2>EACH Trainer Planner</h2>
-  <p style="color:var(--mute);margin-top:-6px">PCSI Housekeeping · Evans Army Community Hospital</p>
-  <label>Email</label><input id="em" type="email" autocomplete="username">
-  <div style="height:10px"></div>
-  <label>Password</label><input id="pw" type="password" autocomplete="current-password">
-  <div style="height:12px"></div>
-  <button class="pri" id="loginBtn" style="width:100%">Sign in</button>
-  <div class="err" id="loginErr"></div>
+<div id="login" class="hidden">
+  <h1>Trainer weekly planner</h1>
+  <p class="sub">PCSI · EACH · Site 570. Sign in to continue.</p>
+  <form id="loginForm">
+    <label class="f">Email<input type="email" id="loginEmail" autocomplete="username" required></label>
+    <label class="f">Password<input type="password" id="loginPass" autocomplete="current-password" required></label>
+    <button type="submit">Sign in</button>
+    <p id="loginMsg" role="alert"></p>
+  </form>
 </div>
-
-<div id="app" class="hidden">
-<header>
-  <div>
-    <h1>EACH Healthcare Housekeeping Training Plan</h1>
-    <div class="sub">PCSI · Contract HT940824D0024_2026 TO 10252 · PWS 1.6.1</div>
-  </div>
-  <div class="row ctrl">
-    <input id="month" type="month" style="width:auto">
-    <span id="status">…</span>
-    <span id="who" class="sub"></span>
-    <button class="link" id="refreshBtn">Refresh</button>
-    <button class="link" id="pwBtn">Change password</button>
-    <button class="link" id="outBtn">Log out</button>
-  </div>
-</header>
-
-<div class="wrap">
-  <div class="card">
-    <div class="row" style="justify-content:space-between;margin-bottom:10px">
-      <h2 style="margin:0;font-size:18px" id="monthTitle"></h2>
-      <div class="row noprint">
-        <button id="csvBtn">↓ CSV</button>
-        <button id="printBtn">Print / PDF</button>
-      </div>
+<div class="wrap hidden" id="app">
+  <header class="top">
+    <div>
+      <h1>Trainer weekly planner</h1>
+      <p class="sub">PCSI · Evans Army Community Hospital · Site 570 <span class="who" id="who"></span></p>
     </div>
-    <div class="stats" id="stats"></div>
-  </div>
-
-  <div class="card">
-    <div class="grid2">
-      <div><label>Monthly theme / focus</label><input data-m="theme"></div>
-      <div><label>Prepared by</label><input data-m="preparedBy"></div>
-      <div><label>Approved by (COR / Manager)</label><input data-m="approvedBy"></div>
+    <div class="controls noprint">
+      <label class="f">Month<select id="selMonth"></select></label>
+      <label class="f">Year<select id="selYear"></select></label>
+      <label class="f">Week<select id="selWeek"></select></label>
+      <button type="button" class="ghost" id="btnToday">This week</button>
+      <button type="button" id="btnPrint">Print this week</button>
+      <button type="button" class="ghost hidden" id="btnOut">Sign out</button>
     </div>
-    <div style="height:10px"></div>
-    <label>Training objectives</label><textarea data-m="objectives"></textarea>
-    <div style="height:10px"></div>
-    <label>Notes</label><textarea data-m="notes"></textarea>
+  </header>
+
+  <div class="weekline">
+    <span class="dates" id="weekDates"></span>
+    <span class="theme" id="monthTheme"></span>
+    <label class="onb noprint"><input type="checkbox" id="chkOnb"> New-hire onboarding this week</label>
+    <span class="printonly" id="onbPrint"></span>
+    <span class="save" id="saveState"></span>
   </div>
 
-  <div id="weeks"></div>
-</div>
-</div>
+  <div class="topics" id="topics"></div>
 
-<datalist id="topics">
-  <option>Hand Hygiene & Infection Prevention</option>
-  <option>Bloodborne Pathogens (OSHA 1910.1030)</option>
-  <option>PPE Donning & Doffing</option>
-  <option>Isolation Room Cleaning (Contact / Droplet / Airborne)</option>
-  <option>C. diff & Sporicidal Disinfection</option>
-  <option>Terminal / Discharge Cleaning</option>
-  <option>OR / Procedure Room Turnover</option>
-  <option>Chemical Safety & SDS (HazCom)</option>
-  <option>Disinfectant Dwell / Contact Times</option>
-  <option>Regulated Medical Waste & Sharps</option>
-  <option>Linen Handling</option>
-  <option>Floor Care & Wet Floor Safety</option>
-  <option>Fire Safety (RACE / PASS)</option>
-  <option>Body Mechanics & Safe Lifting</option>
-  <option>Equipment Cleaning & Color-Coded Microfiber</option>
-  <option>Customer Service & Patient Privacy</option>
-  <option>Workplace Violence Prevention</option>
-  <option>Emergency Codes & Response</option>
-</datalist>
+  <div class="days" id="days"></div>
+
+  <section class="block">
+    <h2>Training hours log</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th style="width:120px">Date</th><th>Employee</th><th style="width:170px">Position</th>
+          <th style="width:190px">Training type</th><th>Topic</th><th style="width:80px">Hours</th>
+          <th style="width:170px">Proof</th><th class="noprint" style="width:40px"></th>
+        </tr></thead>
+        <tbody id="hoursBody"></tbody>
+      </table>
+    </div>
+    <div class="noprint" style="margin-top:10px"><button type="button" class="ghost" id="btnAddRow">Add row</button></div>
+    <div class="totals" id="totals"></div>
+  </section>
+
+  <div class="row2">
+    <section class="block">
+      <h2>Follow-ups and training needs</h2>
+      <textarea id="followups" rows="6" placeholder="Make-ups owed, employees needing refresher, issues from floor rounds, requests from supervisors"></textarea>
+      <div class="printnote" id="followupsPrint"></div>
+    </section>
+    <section class="block">
+      <h2>Month-end CDRL package</h2>
+      <p class="due" id="cdrlDue"></p>
+      <ul class="checks" id="cdrl"></ul>
+    </section>
+  </div>
+
+  <div class="sig printonly">
+    <span>Trainer signature / date</span>
+    <span>Director review / date</span>
+  </div>
+  <footer>Stand-up, IPACE and Customer Service topics follow Section II of the EACH Training Plan. Safety topics are delivered by the Quality/Safety Manager; the trainer collects the sign-ins and hours.</footer>
+</div>
 
 <script>
-const SUPABASE_URL = "https://cmglzngevatkjwtwyxnb.supabase.co";
-const SUPABASE_KEY = "sb_publishable_mnVHxB09Db-PG9ToKVAFKw_7hIp4N64";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+(function(){
+"use strict";
+var MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+/* Section II: [theme, customerService, weeks:[[standup, safety, ipace],...]] */
+var PLAN=[
+ ["Review Role of Housekeeping","Service",[["Role of Housekeeping / Soiled Linen Rooms","Bloodborne Pathogens",""],["Cleaning Cart Set-up","Good Housekeeping",""],["8-Step Cleaning Process","Hazard Communication","AIDET"],["Germicide Usage / Damp & Dust Mopping","",""]]],
+ ["Review Employee Standards","Know your Business, Facility, Dept and Job",[["Uniforms / ID Cards / Personal Appearance","Flammables & Combustibles",""],["Attendance & Dependability","Electrical Safety",""],["Communication & Professionalism","Good Hygiene",""],["Isolation Room Cleaning","",""]]],
+ ["Review General Housekeeping Procedures","Who are your customers?",[["Infection Control / Hand Hygiene","Slips, Trips & Fall Protection",""],["Standard Precautions / Bloodborne Pathogens","Needlestick Prevention",""],["Transmission-Based Precautions / Isolation","Eye & Face Protection",""],["Chemical Dwell Times / Labeling","Attendance Policy",""]]],
+ ["Review Housekeeping Cleaning Standards","The special needs of our customers",[["Service Level Standards Overview","Chemical Hazard Labels",""],["Patient Room – Occupied Clean","Workplace Violence",""],["Patient Room – Discharge Clean","Spills & Liquids",""],["OR Terminal Clean / Special Areas","Equipment Sign in/out & Tag out",""]]],
+ ["Review 8-Step Cleaning Process","First Impressions / Moments of Truth",[["8-Step Process – Steps 1–4","Personal Protective Equipment",""],["8-Step Process – Steps 5–8","Ladder Safety",""],["Cart Setup / Chemical Mixing","Heat Stress",""],["Restroom Cleaning / Phone & Key Sign in/out","",""]]],
+ ["Review Accident Precautions","Legendary Service / Consistently Exceeding Expectations",[["Accident Reporting & Prevention","Universal Precautions",""],["Ergonomics / Back Safety","Accident Prevention",""],["Slip, Trip & Fall Prevention","Back Safety",""],["Corridors / Dress Code, Footwear & Badge Policies","",""]]],
+ ["Review Fire / Safety","A Picture is worth a 1000 Words",[["Fire Prevention & Life Safety Codes","Chemical Hazards",""],["Emergency Codes / Mock Code Review","Life Safety Codes","IPACE"],["Stairway & Fire Zone Locations","Fire Safety & Prevention","Integrity, People, Agility, Compassion & Empowerment"],["Equipment Care and Cleaning","",""]]],
+ ["Review Accident Causes Common to Housekeeping","Verbal & Non-Verbal Communication",[["Common Accident Causes / Emergency Codes","Good Housekeeping",""],["Chemical Mixing / GHS Labeling","Safe Lifting Procedures",""],["Flammable Storage / PPE Use","PAPR / Respiratory Protection","IPACE Integrity"],["Isolation – Daily & Terminal Cleaning","",""]]],
+ ["Review JCAHO Standards / Cautions","Service Recovery",[["Joint Commission Standards Overview","Accident Reporting",""],["Environment of Care / Infection Control Standards","Foot Protection",""],["HIPAA / Patient Confidentiality","Personal Protective Equipment","IPACE People"],["Doors / Kick Plates / Jambs / Frames","",""]]],
+ ["Review Housekeeping Responsibilities","Delivering Service as a Team",[["Housekeeping Responsibilities Review","Cart Safety & Storage of Paper Products",""],["Pt Room Clean – Discharge / Clean Linen Rooms","Horseplay / Workplace Conduct",""],["Tubs, Showers & Restrooms","Ergonomics","IPACE Agility"],["Ceiling / Vent Cleaning / Accident & Incident Reporting","",""]]],
+ ["Review Infection Control","",[["Infection Control Principles / Hand Hygiene","Wellness / Flu & Colds",""],["Bloodborne Pathogens / Sharps Safety","Infection Control",""],["Medical Waste Handling / Waste Storage","Hand Protection","IPACE Compassion"],["Interior Windows / Snow & Inclement Weather","",""]]],
+ ["Review of PAPR Use","",[["PAPR Equipment Review & Donning/Doffing","Emergency Action Plan",""],["Respiratory Protection / Blood & Body Spills","Safety Awareness",""],["Damp / Wet Mopping / Baseboard Cleaning","Respiratory Protection","IPACE Empowerment"],["Year-End Review / Unauthorized Breaks Policy","",""]]]
+];
+var DAYKEYS=["mon","tue","wed","thu","fri"], DAYNAMES=["Monday","Tuesday","Wednesday","Thursday","Friday"];
+var DEFAULTS=[
+ ["Pull Litmos report / confirm topics with Q/S Mgr","Stand-up + Customer Service topic (all shifts)","Hands-on: monthly theme skill check","Refresher / remedial sessions","Log hours & file sign-ins"],
+ ["Litmos overdue-course follow-up","Stand-up (all shifts)","Hands-on: competency spot checks","Train leads & supervisors","Log hours & file sign-ins"],
+ ["Training-needs survey / manager check-in","Stand-up + IPACE (all shifts)","Hands-on: inspection problem areas","Build materials for next month","Log hours & start CDRL draft"],
+ ["Make-up sessions","Stand-up (all shifts)","Reconcile hours: sign-ins vs Litmos vs log","Finalize CDRL package → Director","Prep next month topics & materials"],
+ ["Make-up sessions","Refresher / remedial sessions","Audit employee training files","Training-needs survey / manager check-in","Open / buffer day"]
+];
+var TASKS=[];
+DEFAULTS.forEach(function(w){w.forEach(function(t){if(TASKS.indexOf(t)<0)TASKS.push(t);});});
+["Onboarding: CAF Folder training","Onboarding: Competency assessments","Onboarding: Zero Week / hospital orientation","In-service training","Hands-on: floor coaching rounds","Develop / update training materials","Meeting with Director / managers","Holiday / office closed","Out of office","Other (see notes)"].forEach(function(t){if(TASKS.indexOf(t)<0)TASKS.push(t);});
+var STATUS=["Not started","In progress","Done","Rescheduled","Missed – make-up needed","N/A"];
+var SHIFTS=["—","Days","Evenings","Nights","Weekend","All shifts"];
+var TOPIC_STATUS=["Not delivered","Delivered – all shifts","Partial – make-up needed","Skipped / rescheduled"];
+var SAFETY_STATUS=["Waiting on Q/S Mgr","Delivered – sign-ins collected","Delivered – sign-ins missing","Not scheduled"];
+var POSITIONS=["Housekeeper I","Housekeeper II","Infectious Waste Handler","Lead Worker","Housekeeping Supervisor","Trainer","Other"];
+var TYPES=["Litmos (online)","Hands-on","In-service","Refresher","Onboarding (CAF/Competency)","Stand-up","Safety (Q/S Mgr)","Trainer prep / admin"];
+var PROOF=["Sign-in sheet","Litmos report","Competency form","Acknowledgement form","Trainer log only"];
+var CDRL=[
+ ["memo","Training Plan memo – month, date, contract # filled in"],
+ ["signins","Sign-in sheets: stand-ups, in-service, refresher"],
+ ["litmos","Litmos completion report"],
+ ["safety","Safety sign-ins collected from Q/S Manager"],
+ ["hours","Hours summary by training type (incl. trainer hours)"],
+ ["comp","Completed competency assessments / acknowledgements"],
+ ["next","Next month's topics confirmed"],
+ ["turnin","Package turned in to Director"]
+];
 
-const $ = s => document.querySelector(s);
-const STATUSES = ["Planned","Completed","Rescheduled","Cancelled"];
-let user = null, ym = "", monthDoc = {}, weekDocs = {}, timers = {}, pending = 0;
+var $=function(id){return document.getElementById(id);};
+function el(tag,attrs,kids){var e=document.createElement(tag);if(attrs)for(var k in attrs){if(k==="text")e.textContent=attrs[k];else if(k==="cls")e.className=attrs[k];else e.setAttribute(k,attrs[k]);}(kids||[]).forEach(function(c){if(c)e.appendChild(c);});return e;}
+function sel(opts,val){var s=el("select");opts.forEach(function(o){var op=el("option",{text:o});op.value=o;s.appendChild(op);});if(val!=null&&opts.indexOf(val)>=0)s.value=val;return s;}
+function pad(n){return n<10?"0"+n:""+n;}
+function fmt(d){return (d.getMonth()+1)+"/"+d.getDate();}
+function iso(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
 
-function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
-function uid(){return Math.random().toString(36).slice(2,10)}
-function dim(y,m){return new Date(y,m,0).getDate()}
-function weekCount(){const [y,m]=ym.split("-").map(Number);return Math.ceil(dim(y,m)/7)}
-function weekRange(n){const [y,m]=ym.split("-").map(Number);const a=7*n-6,b=Math.min(7*n,dim(y,m));const p=d=>`${ym}-${String(d).padStart(2,"0")}`;return [p(a),p(b)]}
-function fmt(d){if(!d)return"";const [y,m,dd]=d.split("-");return `${m}/${dd}`}
-function setStatus(t,c){const s=$("#status");s.textContent=t;s.style.color=c||"inherit"}
-
-// ---------- auth ----------
-async function init(){
-  const now=new Date();ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
-  $("#month").value=ym;
-  const {data}=await sb.auth.getSession();
-  if(data.session){user=data.session.user;showApp()}else showLogin();
+/* federal holidays (observed) */
+function nthDow(y,m,dow,n){var d=new Date(y,m,1);var off=(dow-d.getDay()+7)%7;return new Date(y,m,1+off+7*(n-1));}
+function lastDow(y,m,dow){var d=new Date(y,m+1,0);var off=(d.getDay()-dow+7)%7;return new Date(y,m,d.getDate()-off);}
+function obs(d){var w=d.getDay();if(w===6)return new Date(d.getFullYear(),d.getMonth(),d.getDate()-1);if(w===0)return new Date(d.getFullYear(),d.getMonth(),d.getDate()+1);return d;}
+var holCache={};
+function holidays(y){
+  if(holCache[y])return holCache[y];
+  var h={};
+  function add(d,n){h[iso(d)]=n;}
+  add(obs(new Date(y,0,1)),"New Year's Day");add(obs(new Date(y+1,0,1)),"New Year's Day");
+  add(nthDow(y,0,1,3),"MLK Birthday");add(nthDow(y,1,1,3),"Presidents' Day");
+  add(lastDow(y,4,1),"Memorial Day");add(obs(new Date(y,5,19)),"Juneteenth");
+  add(obs(new Date(y,6,4)),"Independence Day");add(nthDow(y,8,1,1),"Labor Day");
+  add(nthDow(y,9,1,2),"Columbus Day");add(obs(new Date(y,10,11)),"Veterans Day");
+  add(nthDow(y,10,4,4),"Thanksgiving");add(obs(new Date(y,11,25)),"Christmas");
+  holCache[y]=h;return h;
 }
-function showLogin(){$("#login").classList.remove("hidden");$("#app").classList.add("hidden")}
-function showApp(){$("#login").classList.add("hidden");$("#app").classList.remove("hidden");$("#who").textContent=user.email;load()}
+function holidayName(d){var h=holidays(d.getFullYear());return h[iso(d)]||(holidays(d.getFullYear()-1)[iso(d)])||"";}
 
-$("#loginBtn").onclick=async()=>{
-  $("#loginErr").textContent="";
-  const {data,error}=await sb.auth.signInWithPassword({email:$("#em").value.trim(),password:$("#pw").value});
-  if(error){$("#loginErr").textContent=error.message;return}
-  user=data.user;$("#pw").value="";showApp();
-};
-$("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")$("#loginBtn").click()});
-$("#outBtn").onclick=async()=>{await sb.auth.signOut();user=null;showLogin()};
-$("#pwBtn").onclick=async()=>{
-  const p=prompt("New password (min 8 characters):");if(!p)return;
-  if(p.length<8){alert("Password must be at least 8 characters.");return}
-  const {error}=await sb.auth.updateUser({password:p});
-  alert(error?("Error: "+error.message):"Password changed.");
-};
-
-// ---------- data ----------
-async function load(){
-  setStatus("Loading…");
-  const paths=[`months/${ym}`];for(let n=1;n<=weekCount();n++)paths.push(`weeks/${ym}-w${n}`);
-  const {data,error}=await sb.from("planner_docs").select("path,data").in("path",paths);
-  if(error){setStatus("Load error: "+error.message,"var(--bad)");return}
-  monthDoc={};weekDocs={};
-  for(let n=1;n<=weekCount();n++)weekDocs[n]={sessions:[]};
-  for(const r of data){
-    if(r.path.startsWith("months/"))monthDoc=r.data||{};
-    else{const n=+r.path.split("-w")[1];weekDocs[n]=Object.assign({sessions:[]},r.data)}
-  }
-  render();setStatus("☁ Saved","var(--accent)");
+/* weeks: Monday-start weeks that touch the month */
+function weeksOf(y,m){
+  var first=new Date(y,m,1);var back=(first.getDay()+6)%7;
+  var start=new Date(y,m,1-back);var last=new Date(y,m+1,0);var out=[];
+  while(start<=last){out.push(new Date(start));start=new Date(start.getFullYear(),start.getMonth(),start.getDate()+7);}
+  return out;
 }
-function save(path,data){
-  clearTimeout(timers[path]);setStatus("Saving…","var(--warn)");
-  timers[path]=setTimeout(async()=>{
-    pending++;
-    const {error}=await sb.from("planner_docs").upsert({path,data,updated_at:new Date().toISOString(),updated_by:user.id},{onConflict:"path"});
-    pending--;
-    if(error)setStatus("Save failed: "+error.message,"var(--bad)");
-    else if(!pending)setStatus("☁ Saved","var(--accent)");
+
+var state={y:0,m:0,w:0};
+var weekData=null, monthData=null, db=null, saveTimers={};
+
+/* storage: shared db when available, else this browser */
+function lsGet(k){try{var v=localStorage.getItem("tp:"+k);return v?JSON.parse(v):null;}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem("tp:"+k,JSON.stringify(v));}catch(e){}}
+var sb=null, user=null;
+function load(path){
+  if(!sb)return Promise.resolve(lsGet(path));
+  return sb.from("planner_docs").select("data").eq("path",path).maybeSingle().then(function(r){
+    if(r.error){setSave("Offline – showing this device's copy");return lsGet(path);}
+    return r.data?r.data.data:lsGet(path);
+  });
+}
+function setSave(t){$("saveState").textContent=t;}
+function save(path,obj){
+  lsSet(path,obj);
+  clearTimeout(saveTimers[path]);
+  setSave("Saving…");
+  saveTimers[path]=setTimeout(function(){
+    if(!sb){setSave("Saved on this device only");return;}
+    sb.from("planner_docs").upsert({path:path,data:obj,updated_at:new Date().toISOString(),updated_by:user?user.id:null}).then(function(r){
+      setSave(r.error?"Not synced – saved on this device ("+r.error.message+")":"Saved");
+    });
   },700);
 }
-const saveMonth=()=>save(`months/${ym}`,monthDoc);
-const saveWeek=n=>save(`weeks/${ym}-w${n}`,weekDocs[n]);
+function weekPath(){return "weeks/"+state.y+"-"+pad(state.m+1)+"-w"+(state.w+1);}
+function monthPath(){return "months/"+state.y+"-"+pad(state.m+1);}
+function saveWeek(){save(weekPath(),weekData);}
+function saveMonth(){save(monthPath(),monthData);}
 
-// ---------- render ----------
+function freshWeek(){
+  var wk=Math.min(state.w,4), start=weeksOf(state.y,state.m)[state.w], d={onboarding:false,days:{},topics:{standup:TOPIC_STATUS[0],safety:SAFETY_STATUS[0],ipace:TOPIC_STATUS[0],cs:TOPIC_STATUS[0]},hours:[],followups:""};
+  DAYKEYS.forEach(function(k,i){
+    var date=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i);
+    var hol=holidayName(date);
+    d.days[k]={task:hol?"Holiday / office closed":DEFAULTS[wk][i],status:hol?"N/A":"Not started",shift:i===1?"All shifts":"—",notes:""};
+  });
+  return d;
+}
+
+/* ---------- render ---------- */
+function renderControls(){
+  var sm=$("selMonth"),sy=$("selYear"),sw=$("selWeek");
+  if(!sm.options.length){MONTHS.forEach(function(n,i){var o=el("option",{text:n});o.value=i;sm.appendChild(o);});}
+  if(!sy.options.length){for(var y=2026;y<=2028;y++){var o=el("option",{text:""+y});o.value=y;sy.appendChild(o);}}
+  sm.value=state.m;sy.value=state.y;
+  sw.innerHTML="";
+  weeksOf(state.y,state.m).forEach(function(s,i){var e=new Date(s.getFullYear(),s.getMonth(),s.getDate()+4);var o=el("option",{text:"Week "+(i+1)+"  ("+fmt(s)+"–"+fmt(e)+")"});o.value=i;sw.appendChild(o);});
+  if(state.w>=sw.options.length)state.w=sw.options.length-1;
+  sw.value=state.w;
+}
+
+function topicCell(k,label,value,owner,opts,key){
+  var s=sel(opts,weekData.topics[key]);
+  s.setAttribute("aria-label",label+" status");
+  s.addEventListener("change",function(){weekData.topics[key]=s.value;saveWeek();});
+  return el("div",{cls:"topic"},[el("div",{cls:"k",text:label}),el("div",{cls:"v",text:value||"—"}),owner?el("div",{cls:"owner",text:owner}):null,s]);
+}
+
 function render(){
-  const [y,m]=ym.split("-").map(Number);
-  $("#monthTitle").textContent=new Date(y,m-1,1).toLocaleString("en-US",{month:"long",year:"numeric"});
-  document.querySelectorAll("[data-m]").forEach(el=>el.value=monthDoc[el.dataset.m]||"");
-  let h="";
-  for(let n=1;n<=weekCount();n++){
-    const [a,b]=weekRange(n),ss=weekDocs[n].sessions;
-    h+=`<div class="card week"><h3><span>Week ${n} <span style="color:var(--mute);font-weight:400">· ${fmt(a)} – ${fmt(b)}</span></span>
-      <button class="noprint" data-add="${n}">+ Add session</button></h3>`;
-    if(!ss.length)h+=`<div class="empty">No sessions planned.</div>`;
-    ss.forEach(s=>{
-      h+=`<div class="sess st-${esc(s.status)}" data-w="${n}" data-id="${s.id}">
-        <button class="x del noprint" title="Remove" data-del="1">×</button>
-        <div><label>Date</label><input type="date" min="${a}" max="${b}" data-f="date" value="${esc(s.date)}"></div>
-        <div><label>Time</label><input type="time" data-f="time" value="${esc(s.time)}"></div>
-        <div class="wide"><label>Topic</label><input list="topics" data-f="topic" value="${esc(s.topic)}"></div>
-        <div><label>Trainer</label><input data-f="trainer" value="${esc(s.trainer)}"></div>
-        <div><label>Location</label><input data-f="location" value="${esc(s.location)}"></div>
-        <div><label>Audience / shift</label><input data-f="audience" value="${esc(s.audience)}"></div>
-        <div><label>Duration (min)</label><input type="number" min="0" data-f="duration" value="${esc(s.duration)}"></div>
-        <div><label>Attendees</label><input type="number" min="0" data-f="attendees" value="${esc(s.attendees)}"></div>
-        <div><label>Status</label><select data-f="status">${STATUSES.map(x=>`<option${x===s.status?" selected":""}>${x}</option>`).join("")}</select></div>
-        <div class="wide"><label>Notes</label><input data-f="notes" value="${esc(s.notes)}"></div>
-      </div>`;
-    });
-    h+=`</div>`;
-  }
-  $("#weeks").innerHTML=h;
-  stats();
-}
-function allSessions(){return Object.values(weekDocs).flatMap(w=>w.sessions)}
-function stats(){
-  const ss=allSessions(),done=ss.filter(s=>s.status==="Completed");
-  const att=done.reduce((t,s)=>t+(+s.attendees||0),0);
-  const hrs=done.reduce((t,s)=>t+(+s.duration||0),0)/60;
-  const pct=ss.length?Math.round(done.length/ss.filter(s=>s.status!=="Cancelled").length*100)||0:0;
-  $("#stats").innerHTML=[
-    [ss.length,"Sessions planned"],[done.length,"Completed"],[pct+"%","Completion rate"],
-    [att,"Attendees trained"],[hrs.toFixed(1),"Training hours"]
-  ].map(([v,l])=>`<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
+  renderControls();
+  var p=PLAN[state.m], wk=state.w, start=weeksOf(state.y,state.m)[wk];
+  var end=new Date(start.getFullYear(),start.getMonth(),start.getDate()+4);
+  $("weekDates").textContent=MONTHS[state.m]+" "+state.y+" · Week "+(wk+1)+" · "+fmt(start)+"–"+fmt(end);
+  $("monthTheme").textContent=p[0];
+  $("chkOnb").checked=!!weekData.onboarding;
+  $("onbPrint").textContent=weekData.onboarding?"New-hire onboarding week":"";
+
+  var topics=$("topics");topics.innerHTML="";
+  var t=wk<4?p[2][wk]:["Make-up / refresher week – no plan topic","",""];
+  topics.appendChild(topicCell("standup","Stand-up",t[0],"",TOPIC_STATUS,"standup"));
+  topics.appendChild(topicCell("safety","Safety",t[1],t[1]?"Delivered by Quality/Safety Mgr":"",SAFETY_STATUS,"safety"));
+  topics.appendChild(topicCell("ipace","IPACE",t[2],"",TOPIC_STATUS,"ipace"));
+  topics.appendChild(topicCell("cs","Customer service",wk===0?p[1]:(p[1]?"(Week 1) "+p[1]:""),"",TOPIC_STATUS,"cs"));
+
+  var days=$("days");days.innerHTML="";
+  DAYKEYS.forEach(function(k,i){
+    var date=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i);
+    var dd=weekData.days[k], hol=holidayName(date), out=date.getMonth()!==state.m;
+    var task=sel(TASKS,dd.task), st=sel(STATUS,dd.status), sh=sel(SHIFTS,dd.shift);
+    var notes=el("textarea",{rows:"4",placeholder:"Notes, who attended, follow-ups"});notes.value=dd.notes||"";
+    var pn=el("div",{cls:"printnote",text:dd.notes||""});
+    function paint(){st.className=st.value==="Done"?"status-done":(st.value.indexOf("Missed")===0||st.value==="Rescheduled")?"status-late":"";}
+    paint();
+    task.addEventListener("change",function(){dd.task=task.value;saveWeek();});
+    st.addEventListener("change",function(){dd.status=st.value;paint();saveWeek();});
+    sh.addEventListener("change",function(){dd.shift=sh.value;saveWeek();});
+    notes.addEventListener("input",function(){dd.notes=notes.value;pn.textContent=notes.value;saveWeek();});
+    task.setAttribute("aria-label",DAYNAMES[i]+" task");st.setAttribute("aria-label",DAYNAMES[i]+" status");sh.setAttribute("aria-label",DAYNAMES[i]+" shift covered");notes.setAttribute("aria-label",DAYNAMES[i]+" notes");
+    var card=el("div",{cls:"day"+(hol?" hol":"")+(out?" out":"")},[
+      el("div",{cls:"dh"},[el("span",{cls:"dn",text:DAYNAMES[i]}),el("span",{cls:"dd",text:fmt(date)})]),
+      hol?el("div",{cls:"tag",text:hol+" (federal holiday)"}):null,
+      el("label",{cls:"f"},[document.createTextNode("Task"),task]),
+      el("label",{cls:"f"},[document.createTextNode("Status"),st]),
+      el("label",{cls:"f"},[document.createTextNode("Shift covered"),sh]),
+      notes,pn
+    ]);
+    days.appendChild(card);
+  });
+
+  renderHours();
+  $("followups").value=weekData.followups||"";
+  $("followupsPrint").textContent=weekData.followups||"";
+  renderCdrl();
 }
 
-// ---------- events ----------
-document.querySelectorAll("[data-m]").forEach(el=>el.addEventListener("input",()=>{monthDoc[el.dataset.m]=el.value;saveMonth()}));
-$("#weeks").addEventListener("click",e=>{
-  const add=e.target.dataset.add;
-  if(add){const [a]=weekRange(+add);weekDocs[add].sessions.push({id:uid(),date:a,time:"",topic:"",trainer:"",location:"",audience:"",duration:"",attendees:"",status:"Planned",notes:""});saveWeek(add);render();return}
-  if(e.target.dataset.del){
-    const c=e.target.closest(".sess"),n=c.dataset.w;
-    if(!confirm("Remove this session?"))return;
-    weekDocs[n].sessions=weekDocs[n].sessions.filter(s=>s.id!==c.dataset.id);saveWeek(n);render();
+function weekDateOpts(){
+  var s=weeksOf(state.y,state.m)[state.w],o=[];
+  for(var i=0;i<7;i++){var d=new Date(s.getFullYear(),s.getMonth(),s.getDate()+i);o.push(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][i]+" "+fmt(d));}
+  return o;
+}
+function renderHours(){
+  var body=$("hoursBody");body.innerHTML="";
+  var dOpts=weekDateOpts();
+  if(!weekData.hours.length){
+    var tr=el("tr",{},[el("td",{colspan:"8",text:"No hours logged yet. Add a row for each session or Litmos course completed."})]);
+    tr.firstChild.style.color="var(--muted)";body.appendChild(tr);
   }
+  weekData.hours.forEach(function(r,idx){
+    var d=sel(dOpts,r.date),pos=sel(POSITIONS,r.position),ty=sel(TYPES,r.type),pr=sel(PROOF,r.proof);
+    var emp=el("input",{type:"text",placeholder:"Name or \"Group of 12\""});emp.value=r.employee||"";
+    var top=el("input",{type:"text",placeholder:"Course or topic"});top.value=r.topic||"";
+    var hr=el("input",{type:"number",min:"0",step:"0.25",inputmode:"decimal"});hr.value=r.hours||"";
+    function bind(node,key,ev){node.addEventListener(ev||"change",function(){r[key]=node.value;if(key==="hours"||key==="type"||key==="position")renderTotals();saveWeek();});}
+    bind(d,"date");bind(pos,"position");bind(ty,"type");bind(pr,"proof");bind(emp,"employee","input");bind(top,"topic","input");bind(hr,"hours","input");
+    var x=el("button",{type:"button",cls:"x","aria-label":"Remove row",text:"Remove"});
+    x.addEventListener("click",function(){weekData.hours.splice(idx,1);renderHours();saveWeek();});
+    body.appendChild(el("tr",{},[el("td",{},[d]),el("td",{},[emp]),el("td",{},[pos]),el("td",{},[ty]),el("td",{},[top]),el("td",{cls:"num"},[hr]),el("td",{},[pr]),el("td",{cls:"noprint"},[x])]));
+  });
+  renderTotals();
+}
+function renderTotals(){
+  var t={},total=0,trainer=0;
+  weekData.hours.forEach(function(r){var h=parseFloat(r.hours)||0;t[r.type]=(t[r.type]||0)+h;total+=h;if(r.position==="Trainer")trainer+=h;});
+  var box=$("totals");box.innerHTML="";
+  TYPES.forEach(function(k){if(t[k])box.appendChild(el("span",{},[document.createTextNode(k+": "),el("b",{text:(Math.round(t[k]*100)/100)+" h"})]));});
+  box.appendChild(el("span",{},[document.createTextNode("Trainer's own: "),el("b",{text:(Math.round(trainer*100)/100)+" h"})]));
+  box.appendChild(el("span",{cls:"all",text:"Week total: "+(Math.round(total*100)/100)+" h"}));
+}
+function renderCdrl(){
+  var last=new Date(state.y,state.m+1,0);var d=new Date(last);
+  var bd=0;while(bd<3){d.setDate(d.getDate()-1);if(d.getDay()!==0&&d.getDay()!==6&&!holidayName(d))bd++;}
+  $("cdrlDue").textContent="Suggested turn-in to Director: "+DAYNAMES[(d.getDay()+6)%7]+" "+fmt(d)+" (3 business days before month-end)";
+  var ul=$("cdrl");ul.innerHTML="";
+  CDRL.forEach(function(c){
+    var cb=el("input",{type:"checkbox"});cb.checked=!!monthData.cdrl[c[0]];
+    cb.addEventListener("change",function(){monthData.cdrl[c[0]]=cb.checked;saveMonth();});
+    ul.appendChild(el("li",{},[el("label",{},[cb,el("span",{text:c[1]})])]));
+  });
+}
+
+function open(){
+  var wp=weekPath(),mp=monthPath();
+  setSave("Loading…");
+  Promise.all([load(wp),load(mp)]).then(function(r){
+    weekData=(r[0]&&r[0].days)?r[0]:freshWeek();
+    if(!weekData.topics)weekData.topics=freshWeek().topics;
+    if(!weekData.hours)weekData.hours=[];
+    monthData=r[1]||{cdrl:{}};if(!monthData.cdrl)monthData.cdrl={};
+    render();
+    setSave(db?"Synced":"Saving on this device");
+  });
+}
+function goToday(){
+  var n=new Date();state.y=Math.min(Math.max(n.getFullYear(),2026),2028);state.m=n.getMonth();
+  var ws=weeksOf(state.y,state.m),t=new Date(n.getFullYear(),n.getMonth(),n.getDate());state.w=0;
+  ws.forEach(function(s,i){if(t>=s)state.w=i;});
+}
+
+/* events */
+$("selMonth").addEventListener("change",function(){state.m=+this.value;state.w=0;open();});
+$("selYear").addEventListener("change",function(){state.y=+this.value;state.w=0;open();});
+$("selWeek").addEventListener("change",function(){state.w=+this.value;open();});
+$("btnToday").addEventListener("click",function(){goToday();open();});
+$("btnPrint").addEventListener("click",function(){window.print();});
+$("chkOnb").addEventListener("change",function(){
+  weekData.onboarding=this.checked;
+  var wk=Math.min(state.w,4);
+  if(this.checked){if(weekData.days.wed.task===DEFAULTS[wk][2])weekData.days.wed.task="Onboarding: CAF Folder training";if(weekData.days.thu.task===DEFAULTS[wk][3])weekData.days.thu.task="Onboarding: Competency assessments";}
+  else{if(weekData.days.wed.task==="Onboarding: CAF Folder training")weekData.days.wed.task=DEFAULTS[wk][2];if(weekData.days.thu.task==="Onboarding: Competency assessments")weekData.days.thu.task=DEFAULTS[wk][3];}
+  render();saveWeek();
 });
-$("#weeks").addEventListener("input",e=>{
-  const f=e.target.dataset.f;if(!f)return;
-  const c=e.target.closest(".sess"),n=c.dataset.w,s=weekDocs[n].sessions.find(x=>x.id===c.dataset.id);
-  s[f]=e.target.value;
-  if(f==="status")c.className=`sess st-${s.status}`;
-  saveWeek(n);stats();
+$("btnAddRow").addEventListener("click",function(){
+  weekData.hours.push({date:weekDateOpts()[0],employee:"",position:POSITIONS[0],type:TYPES[0],topic:"",hours:"",proof:PROOF[0]});
+  renderHours();saveWeek();
+  var rows=$("hoursBody").querySelectorAll("tr");var last=rows[rows.length-1];var inp=last&&last.querySelector("input");if(inp)inp.focus();
 });
-$("#month").onchange=e=>{if(e.target.value){ym=e.target.value;load()}};
-$("#refreshBtn").onclick=load;
-$("#printBtn").onclick=()=>window.print();
-$("#csvBtn").onclick=()=>{
-  const cols=["week","date","time","topic","trainer","location","audience","duration","attendees","status","notes"];
-  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
-  const rows=[cols.join(",")];
-  for(const [n,w] of Object.entries(weekDocs))w.sessions.forEach(s=>rows.push(cols.map(c=>q(c==="week"?n:s[c])).join(",")));
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(new Blob([rows.join("\n")],{type:"text/csv"}));
-  a.download=`EACH-training-plan-${ym}.csv`;a.click();
-};
-sb.auth.onAuthStateChange((ev,session)=>{if(ev==="SIGNED_OUT"){user=null;showLogin()}});
-init();
+$("followups").addEventListener("input",function(){weekData.followups=this.value;$("followupsPrint").textContent=this.value;saveWeek();});
+
+function showApp(u){
+  user=u;$("who").textContent=u&&u.email?" · signed in as "+u.email:"";
+  $("login").classList.add("hidden");$("app").classList.remove("hidden");$("btnOut").classList.remove("hidden");
+  goToday();open();
+}
+function showLogin(msg){
+  $("app").classList.add("hidden");$("login").classList.remove("hidden");
+  $("loginMsg").textContent=msg||"";
+}
+var cfg=window.PLANNER_CONFIG||{};
+if(!window.supabase||!cfg.SUPABASE_URL||cfg.SUPABASE_URL.indexOf("YOUR-")>=0){
+  $("app").classList.remove("hidden");
+  goToday();open();
+  setTimeout(function(){setSave("Supabase not set up yet – saving on this device only");},50);
+}else{
+  sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
+  sb.auth.getSession().then(function(r){var s=r.data&&r.data.session;if(s)showApp(s.user);else showLogin();});
+  $("loginForm").addEventListener("submit",function(e){
+    e.preventDefault();$("loginMsg").textContent="Signing in…";
+    sb.auth.signInWithPassword({email:$("loginEmail").value.trim(),password:$("loginPass").value}).then(function(r){
+      if(r.error)$("loginMsg").textContent="Sign-in failed: "+r.error.message;else showApp(r.data.user);
+    });
+  });
+  $("btnOut").addEventListener("click",function(){sb.auth.signOut().then(function(){showLogin("Signed out.");});});
+}
+})();
 </script>
 </body>
 </html>
