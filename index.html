@@ -126,7 +126,10 @@
     background:transparent; border:none; border-bottom:3px solid transparent; color:var(--ink-soft); margin-bottom:-2px; }
   .tab-btn:hover{ color:var(--ink); }
   .tab-btn.active{ color:var(--ink); border-bottom-color:var(--brass); }
-  #tab-yearly, #tab-records{ display:none; }
+  #tab-yearly, #tab-records, #tab-nib{ display:none; }
+  body[data-active-tab="nib"] #tab-ledger{ display:none; }
+  body[data-active-tab="nib"] #tab-nib{ display:block; }
+  body[data-active-tab="nib"] .picker{ display:none; }
   body[data-active-tab="yearly"] #tab-ledger{ display:none; }
   body[data-active-tab="yearly"] #tab-yearly{ display:block; }
   body[data-active-tab="yearly"] .picker{ display:none; }
@@ -153,6 +156,43 @@
   .record-actions{ display:flex; gap:6px; flex:none; }
   .record-empty{ text-align:center; padding:30px 10px; color:var(--ink-soft); font-size:14px; }
   .records-usage{ font-size:12px; color:var(--ink-soft); }
+
+  /* ---------- NIB Products (needed vs purchased) ---------- */
+  #tab-nib .summary{ grid-template-columns:repeat(4,1fr); }
+  .nib-tools{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:14px; }
+  .nib-tools .field{ min-width:150px; }
+  .nib-tools select, .nib-tools input{ font:inherit; font-size:14px; padding:8px 10px; border:1px solid var(--rule);
+    border-radius:8px; background:#fff; color:var(--ink); }
+  .nib-tools input[type="search"]{ min-width:220px; }
+  .nib-chips{ display:flex; gap:8px; flex-wrap:wrap; margin:0 0 16px; }
+  .nib-chip{ font-size:12px; font-weight:700; padding:5px 11px; border-radius:999px; border:1px solid var(--rule);
+    background:var(--paper-2); cursor:pointer; color:var(--ink); }
+  .nib-chip.on{ outline:2px solid var(--ink); outline-offset:1px; }
+  .badge{ display:inline-block; font-size:11px; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; }
+  .st-complete{ background:#DCEFD9; color:#1E5A2A; }
+  .st-ontrack{ background:#DDE7F5; color:#1F3F72; }
+  .st-behind{ background:#F6DAD5; color:#8A2A1E; }
+  .st-noreq{ background:var(--rule-2); color:var(--ink-soft); }
+  .st-unplanned{ background:#F6E7C4; color:#7A4F0E; }
+  .pbar{ position:relative; height:10px; background:var(--rule-2); border-radius:6px; overflow:hidden; min-width:90px; }
+  .pbar > span{ position:absolute; left:0; top:0; bottom:0; background:var(--pcsi-green); border-radius:6px; }
+  .pbar > i{ position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--ink); opacity:.55; }
+  .pbar.over > span{ background:var(--brass); }
+  .pct{ font-size:12px; color:var(--ink-soft); margin-top:3px; }
+  table.ledger td.neg{ color:var(--danger); }
+  .nib-note{ font-size:12px; color:var(--ink-soft); margin:12px 0 0; }
+  .nib-form{ border:1px solid var(--brass); background:linear-gradient(180deg,var(--brass-soft),var(--paper-2));
+    border-radius:12px; padding:16px 18px; margin:0 0 16px; }
+  .nib-form h3{ font-family:"Fraunces",Georgia,serif; font-weight:600; font-size:17px; margin:0 0 12px; }
+  .nib-form .field select{ font:inherit; padding:9px 11px; border:1px solid var(--rule); border-radius:8px; background:#fff; color:var(--ink); }
+  .nib-form-actions{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .nib-form-actions .btn-add{ width:auto; padding:11px 22px; }
+  .nib-form-actions .record-status{ margin:0; }
+  .st-added{ background:#E7E0F5; color:#4A2F82; }
+  .nib-edit{ background:none; border:1px solid var(--rule); color:var(--ink-soft); font-size:12px; font-weight:600; padding:3px 9px; margin-top:6px; }
+  .nib-edit:hover{ border-color:var(--brass); color:var(--brass); }
+  .tabnav{ overflow-x:auto; scrollbar-width:none; }
+  @media (max-width:720px){ #tab-nib .summary{ grid-template-columns:1fr 1fr; } }
 
   .months-table{ width:100%; border-collapse:collapse; }
   .months-table th{ text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft);
@@ -277,6 +317,7 @@
       <button class="tab-btn active" id="tab-btn-ledger" data-tab="ledger" role="tab" aria-selected="true">Procurement Ledger</button>
       <button class="tab-btn" id="tab-btn-yearly" data-tab="yearly" role="tab" aria-selected="false">Year Tracking</button>
       <button class="tab-btn" id="tab-btn-records" data-tab="records" role="tab" aria-selected="false">Invoice Records</button>
+      <button class="tab-btn" id="tab-btn-nib" data-tab="nib" role="tab" aria-selected="false">NIB Products</button>
     </div>
 
     <div class="site-bar">
@@ -489,6 +530,76 @@
     </section>
 
   </div><!-- /#tab-records -->
+
+  <div id="tab-nib">
+
+    <section class="summary" aria-label="NIB requirement summary">
+      <div class="stat"><div class="k">Annual units required</div><div class="v num" id="nib-need">0</div></div>
+      <div class="stat"><div class="k">Units purchased</div><div class="v num" id="nib-bought">0</div></div>
+      <div class="stat"><div class="k">Units remaining</div><div class="v num" id="nib-left">0</div></div>
+      <div class="stat total"><div class="k">% of requirement</div><div class="v num" id="nib-pct">0%</div></div>
+    </section>
+
+    <section class="panel">
+      <h2>Needed vs. purchased</h2>
+      <p class="cap" id="nib-cap">Annual quantities from the AbilityOne Attestation Form, compared with purchases logged in the Procurement Ledger</p>
+      <div class="nib-tools">
+        <div class="field"><label for="nib-period">Contract period</label><select id="nib-period"></select></div>
+        <div class="field"><label for="nib-search">Search</label><input type="search" id="nib-search" placeholder="NSN or product" autocomplete="off" /></div>
+        <button class="btn-ghost" id="nib-csv">&#8595; CSV</button>
+        <button class="btn-ghost" id="nib-add">&#43; Add product</button>
+      </div>
+
+      <div class="nib-form" id="nib-form" hidden>
+        <h3 id="nib-form-title">Add a product</h3>
+        <div class="grid">
+          <div class="field c3"><label for="nf-nsn">NSN / part #</label><input type="text" id="nf-nsn" placeholder="7930-01-555-2898" autocomplete="off" /></div>
+          <div class="field c6"><label for="nf-desc">Product description</label><input type="text" id="nf-desc" placeholder="e.g. Cleaner, Glass, RTU, 32 oz" autocomplete="off" /></div>
+          <div class="field c3"><label for="nf-qty">Annual qty needed</label><input type="number" id="nf-qty" min="0" step="1" placeholder="0" /></div>
+          <div class="field c3"><label for="nf-pack">Pack size</label><input type="text" id="nf-pack" placeholder="12 EA/CA" autocomplete="off" /></div>
+          <div class="field c3"><label for="nf-unit">Unit</label>
+            <select id="nf-unit"><option value="CASE">CASE</option><option value="BOX">BOX</option><option value="PACK">PACK</option><option value="PAIL">PAIL</option><option value="EACH">EACH</option><option value="ROLL">ROLL</option></select></div>
+          <div class="field c6"><label for="nf-npa">Producing NPA</label><input type="text" id="nf-npa" placeholder="e.g. The Lighthouse for the Blind" autocomplete="off" /></div>
+          <div class="field c6"><label for="nf-source">Source</label>
+            <select id="nf-source"><option value="Recommended">Recommended (CNA / NPA)</option><option value="Attestation">Attestation Form</option><option value="Site request">Site request</option></select></div>
+          <div class="field c6"><label for="nf-codes">Other part #s for this item (comma-separated)</label><input type="text" id="nf-codes" placeholder="e.g. 1005290219, VB-20HSTP" autocomplete="off" /></div>
+          <div class="field c12"><label for="nf-notes">Notes</label><input type="text" id="nf-notes" placeholder="e.g. Recommended by SourceAmerica 9/2026 to replace Spartan glass cleaner" autocomplete="off" /></div>
+          <div class="c12 nib-form-actions">
+            <button class="btn-add" id="nf-save">Save product</button>
+            <button class="btn-ghost" id="nf-cancel" type="button">Cancel</button>
+            <button class="btn-ghost danger" id="nf-delete" type="button" hidden>Remove from list</button>
+            <span class="record-status" id="nf-status"></span>
+          </div>
+        </div>
+      </div>
+      <div class="nib-chips" id="nib-chips"></div>
+      <div class="table-scroll">
+        <table class="ledger">
+          <thead>
+            <tr>
+              <th style="width:36px;">#</th>
+              <th>NSN &amp; product</th>
+              <th class="r" style="width:84px;">Needed</th>
+              <th class="r" style="width:92px;">Purchased</th>
+              <th class="r" style="width:92px;">Remaining</th>
+              <th style="width:150px;">Progress</th>
+              <th class="r" style="width:96px;">Expected to date</th>
+              <th style="width:110px;">Status</th>
+            </tr>
+          </thead>
+          <tbody id="nib-rows"><tr><td colspan="8"><div class="empty">Loading&hellip;</div></td></tr></tbody>
+        </table>
+      </div>
+      <p class="nib-note">Progress bar: green = purchased, dark tick = where you should be by today (monthly pace). Quantities use the Attestation unit (case / box / pail / pack / each).</p>
+    </section>
+
+    <section class="panel">
+      <h2>Purchases not matched to an NSN</h2>
+      <p class="cap">Ledger lines in this period whose Mfg / item number doesn&rsquo;t match an Attestation NSN or its manufacturer part #. Log the NSN in the Mfg / item number field so it counts here.</p>
+      <div id="nib-unmatched"></div>
+    </section>
+
+  </div><!-- /#tab-nib -->
 
 </div>
 
@@ -1185,6 +1296,7 @@
     var t=document.body.getAttribute("data-active-tab");
     if(t==="yearly") loadYearly();
     if(t==="records") loadRecords();
+    if(t==="nib") loadNib();
   });
   elYear.addEventListener("change",function(){ currentYear=parseInt(elYear.value,10); elMonthFilter.value="all"; loadEntries(); });
   elMonthFilter.addEventListener("change",render);
@@ -1194,7 +1306,242 @@
     var t=document.body.getAttribute("data-active-tab");
     if(t==="yearly") loadYearly();
     if(t==="records") loadRecords();
+    if(t==="nib"){ nibProducts=null; loadNib(); }
   });
+
+  /* =========================================================
+     NIB PRODUCTS TAB  (needed vs purchased)
+     Reads the "nib_products" table (annual requirement per NSN, from the
+     AbilityOne Attestation Form) and the existing "purchases" table.
+     Read-only: nothing here writes to purchases or changes the ledger tab.
+     Contract period runs Oct 1 - Sep 30.
+     ========================================================= */
+  var NIB_REST = SB_URL + "/rest/v1/nib_products";
+  var nibProducts = null, nibPurchases = [], nibFilter = "all", nibLoadedFor = "";
+  var elNibPeriod=$("nib-period"), elNibSearch=$("nib-search");
+
+  function nibNorm(s){ return String(s==null?"":s).toUpperCase().replace(/[^A-Z0-9]/g,""); }
+  function nibFmt(n){ return (Math.round((Number(n)||0)*10)/10).toLocaleString("en-US"); }
+  function nibPeriodStart(){ return parseInt(elNibPeriod.value,10); }      // year the period starts (Oct 1)
+  function nibFillPeriods(){
+    if(elNibPeriod.options.length) return;
+    var now=new Date(), cur=now.getMonth()>=9 ? now.getFullYear() : now.getFullYear()-1, html="";
+    for(var y=cur+1;y>=cur-3;y--){
+      html+='<option value="'+y+'"'+(y===cur?" selected":"")+'>Oct '+y+' – Sep '+(y+1)+'</option>';
+    }
+    elNibPeriod.innerHTML=html;
+  }
+  function nibMonthsElapsed(startYear){
+    var now=new Date();
+    var m=(now.getFullYear()-startYear)*12 + now.getMonth() - 9 + 1;   // Oct = month 9
+    return Math.max(0, Math.min(12, m));
+  }
+  function nibStatus(need,bought,expected){
+    if(need<=0) return bought>0 ? "Unplanned Buy" : "No Req";
+    if(bought>=need) return "Complete";
+    if(bought>=expected) return "On Track";
+    return "Behind";
+  }
+  var NIB_CLASS={ "Complete":"st-complete", "On Track":"st-ontrack", "Behind":"st-behind", "No Req":"st-noreq", "Unplanned Buy":"st-unplanned" };
+
+  function nibLoadProducts(){
+    var url=NIB_REST+"?select=*&site=eq."+encodeURIComponent(currentSite)+"&order=line_no.asc";
+    return fetch(url,{headers:sbHeaders()}).then(function(r){ if(!r.ok) throw new Error("nib_products "+r.status); return r.json(); });
+  }
+  function nibLoadPurchases(startYear){
+    var url=REST+"?select=*&site=eq."+encodeURIComponent(currentSite)+
+            "&purchase_date=gte."+startYear+"-10-01&purchase_date=lt."+(startYear+1)+"-10-01&order=purchase_date.asc";
+    return fetch(url,{headers:sbHeaders()}).then(function(r){ if(!r.ok) throw new Error("load "+r.status); return r.json(); });
+  }
+  function loadNib(){
+    nibFillPeriods();
+    var startYear=nibPeriodStart();
+    $("nib-rows").innerHTML='<tr><td colspan="8"><div class="empty">Loading&hellip;</div></td></tr>';
+    var pProducts = (nibProducts && nibLoadedFor===currentSite) ? Promise.resolve(nibProducts) : nibLoadProducts();
+    Promise.all([pProducts, nibLoadPurchases(startYear)]).then(function(res){
+      nibProducts=res[0]; nibLoadedFor=currentSite; nibPurchases=res[1]||[];
+      renderNib();
+    }).catch(function(err){
+      console.error(err);
+      var missing=/nib_products (404|400)/.test(String(err&&err.message));
+      $("nib-rows").innerHTML='<tr><td colspan="8"><div class="empty"><div class="big">'+
+        (missing?'NIB product list not set up yet':'Could not load NIB products')+'</div>'+
+        (missing?'Run <code>nib_products_setup.sql</code> once in Supabase &rarr; SQL Editor, then click Refresh.'
+                :'Check your connection and click Refresh.')+'</div></td></tr>';
+      $("nib-unmatched").innerHTML="";
+    });
+  }
+
+  function nibCompute(){
+    var startYear=nibPeriodStart(), months=nibMonthsElapsed(startYear);
+    var byCode={}, list=(nibProducts||[]).map(function(p){
+      var row={ p:p, need:Number(p.annual_qty)||0, bought:0, lines:0 };
+      byCode[nibNorm(p.nsn)]=row;
+      (p.alt_codes||[]).forEach(function(c){ var k=nibNorm(c); if(k.length>=5 && !byCode[k]) byCode[k]=row; });
+      return row;
+    });
+    var nsnKeys=list.map(function(r){ return { k:nibNorm(r.p.nsn), row:r }; });
+    var unmatched=[];
+    nibPurchases.forEach(function(e){
+      var item=nibNorm(e.item_no), prod=nibNorm(e.product), hit=byCode[item]||null;
+      if(!hit){ for(var i=0;i<nsnKeys.length;i++){ var k=nsnKeys[i].k; if((item&&item.indexOf(k)>=0)||prod.indexOf(k)>=0){ hit=nsnKeys[i].row; break; } } }
+      if(hit){ hit.bought+=Number(e.qty)||0; hit.lines++; } else unmatched.push(e);
+    });
+    list.forEach(function(r){
+      r.expected=Math.round(r.need/12*months*10)/10;
+      r.left=r.need-r.bought;
+      r.pct=r.need>0 ? r.bought/r.need : null;
+      r.status=nibStatus(r.need,r.bought,r.expected);
+    });
+    return { list:list, unmatched:unmatched, months:months, startYear:startYear };
+  }
+
+  function renderNib(){
+    var c=nibCompute(), list=c.list;
+    var need=0,bought=0,counts={};
+    list.forEach(function(r){ need+=r.need; bought+=Math.min(r.bought, r.need>0?r.need:r.bought); counts[r.status]=(counts[r.status]||0)+1; });
+    var rawBought=list.reduce(function(s,r){return s+r.bought;},0);
+    $("nib-need").textContent=nibFmt(need);
+    $("nib-bought").textContent=nibFmt(rawBought);
+    $("nib-left").textContent=nibFmt(Math.max(0,need-bought));
+    $("nib-pct").textContent=(need>0?Math.round(bought/need*100):0)+"%";
+    $("nib-cap").textContent="Oct "+c.startYear+" – Sep "+(c.startYear+1)+" · "+c.months+" of 12 months elapsed · "+
+      list.length+" NSNs from the Attestation Form vs. purchases logged in the Procurement Ledger";
+
+    var chips=[["all","All",list.length],["Behind","Behind",counts["Behind"]||0],["On Track","On Track",counts["On Track"]||0],
+               ["Complete","Complete",counts["Complete"]||0],["No Req","No Req",counts["No Req"]||0],["Unplanned Buy","Unplanned",counts["Unplanned Buy"]||0],
+               ["added","Added / recommended",list.filter(function(r){ return r.p.source&&r.p.source!=="Attestation"; }).length]];
+    $("nib-chips").innerHTML=chips.map(function(ch){
+      var cls=ch[0]==="all"?"":" "+(ch[0]==="added"?"st-added":NIB_CLASS[ch[0]]);
+      return '<button class="nib-chip'+cls+(nibFilter===ch[0]?" on":"")+'" data-f="'+esc(ch[0])+'">'+esc(ch[1])+' &middot; '+ch[2]+'</button>';
+    }).join("");
+    Array.prototype.forEach.call($("nib-chips").querySelectorAll(".nib-chip"),function(b){
+      b.addEventListener("click",function(){ nibFilter=b.getAttribute("data-f"); renderNib(); });
+    });
+
+    var q=nibNorm(elNibSearch.value), qText=String(elNibSearch.value||"").toLowerCase().trim();
+    var shown=list.filter(function(r){
+      if(nibFilter==="added"){ if(!r.p.source||r.p.source==="Attestation") return false; }
+      else if(nibFilter!=="all" && r.status!==nibFilter) return false;
+      if(!qText) return true;
+      return nibNorm(r.p.nsn).indexOf(q)>=0 || String(r.p.description).toLowerCase().indexOf(qText)>=0;
+    });
+    if(!list.length){
+      $("nib-rows").innerHTML='<tr><td colspan="8"><div class="empty"><div class="big">No NIB products for '+esc(activeName())+'</div>Add rows to the nib_products table in Supabase.</div></td></tr>';
+    } else if(!shown.length){
+      $("nib-rows").innerHTML='<tr><td colspan="8"><div class="empty">No products match this filter.</div></td></tr>';
+    } else {
+      $("nib-rows").innerHTML=shown.map(function(r){
+        var p=r.p, meta=[];
+        if(p.pack_size) meta.push(esc(p.pack_size)); if(p.unit) meta.push(esc(p.unit)); if(p.producing_npa) meta.push(esc(p.producing_npa));
+        var w=r.need>0?Math.min(100,r.bought/r.need*100):(r.bought>0?100:0);
+        var tick=r.need>0?Math.min(100,r.expected/r.need*100):0;
+        var bar='<div class="pbar'+(r.need>0&&r.bought>r.need?' over':'')+'"><span style="width:'+w.toFixed(1)+'%"></span>'+
+                (r.need>0?'<i style="left:calc('+tick.toFixed(1)+'% - 1px)"></i>':'')+'</div>'+
+                '<div class="pct">'+(r.pct==null?'&mdash;':Math.round(r.pct*100)+'%')+(r.lines?' &middot; '+r.lines+' line'+(r.lines>1?'s':''):'')+'</div>';
+        return '<tr>'+
+          '<td class="num">'+esc(p.line_no||"")+'</td>'+
+          '<td><div class="prod num">'+esc(p.nsn)+'</div><div>'+esc(p.description)+'</div>'+
+            (meta.length?'<div class="meta">'+meta.join(' &middot; ')+'</div>':'')+
+            (p.notes?'<div class="meta" style="color:var(--brass);">'+esc(p.notes)+'</div>':'')+
+            '<div>'+(p.source&&p.source!=="Attestation"?'<span class="badge st-added">'+esc(p.source)+'</span> ':'')+
+            '<button class="nib-edit" data-id="'+esc(p.id)+'">Edit</button></div></td>'+
+          '<td class="r num">'+nibFmt(r.need)+'</td>'+
+          '<td class="r num">'+nibFmt(r.bought)+'</td>'+
+          '<td class="r num'+(r.left<0?' neg':'')+'">'+nibFmt(r.left)+'</td>'+
+          '<td>'+bar+'</td>'+
+          '<td class="r num">'+nibFmt(r.expected)+'</td>'+
+          '<td><span class="badge '+NIB_CLASS[r.status]+'">'+esc(r.status)+'</span></td></tr>';
+      }).join("");
+    }
+
+    var um=c.unmatched;
+    $("nib-unmatched").innerHTML = !um.length
+      ? '<div class="record-empty">Every purchase in this period matched an Attestation NSN.</div>'
+      : '<div class="table-scroll"><table class="ledger"><thead><tr><th style="width:96px;">Date</th><th>Product</th><th>Mfg / item #</th><th>Vendor</th><th class="r" style="width:70px;">Qty</th></tr></thead><tbody>'+
+        um.map(function(e){ return '<tr><td class="num">'+fmtDate(e.purchase_date)+'</td><td>'+esc(e.product)+'</td><td class="num">'+(e.item_no?esc(e.item_no):'&mdash;')+'</td><td>'+(e.vendor?esc(e.vendor):'&mdash;')+'</td><td class="r num">'+nibFmt(e.qty)+'</td></tr>'; }).join("")+
+        '</tbody></table></div>';
+  }
+
+  function nibCSV(){
+    if(!nibProducts||!nibProducts.length){ alert("No NIB products loaded yet."); return; }
+    var c=nibCompute(), headers=["Line","NSN","Description","Pack Size","Unit","Producing NPA","Annual Needed","Purchased","Remaining","% Complete","Expected To Date","Status","Source","Other Part #s","Notes"];
+    var cell=function(v){ v=String(v==null?"":v).replace(/"/g,'""'); return /[",\n]/.test(v)?'"'+v+'"':v; };
+    var lines=['"Site: '+activeName().replace(/"/g,'""')+'","Contract period Oct '+c.startYear+' - Sep '+(c.startYear+1)+'"', headers.join(",")];
+    c.list.forEach(function(r){
+      lines.push([r.p.line_no,r.p.nsn,r.p.description,r.p.pack_size,r.p.unit,r.p.producing_npa,r.need,r.bought,r.left,
+        r.pct==null?"":(r.pct*100).toFixed(1)+"%",r.expected,r.status,r.p.source||"Attestation",(r.p.alt_codes||[]).join("; "),r.p.notes].map(cell).join(","));
+    });
+    downloadBlob("﻿"+lines.join("\r\n"), (activeName().replace(/[^\w-]+/g,"-")||"Site")+"-NIB-Products-FY"+(c.startYear+1)+".csv", "text/csv;charset=utf-8;");
+  }
+  /* ---------- add / edit / remove products (writes only to nib_products) ---------- */
+  var nibEditId=null;
+  var nf={ form:$("nib-form"), title:$("nib-form-title"), nsn:$("nf-nsn"), desc:$("nf-desc"), qty:$("nf-qty"), pack:$("nf-pack"),
+           unit:$("nf-unit"), npa:$("nf-npa"), source:$("nf-source"), codes:$("nf-codes"), notes:$("nf-notes"),
+           save:$("nf-save"), cancel:$("nf-cancel"), del:$("nf-delete"), status:$("nf-status") };
+  function nibWrite(method,query,body){
+    return fetch(NIB_REST+(query||""),{ method:method, headers:sbHeaders({"Prefer":"return=representation"}),
+      body:body?JSON.stringify(body):undefined }).then(function(r){
+        if(r.status===409) throw new Error("That NSN is already on the list for this site — use Edit on its row instead.");
+        if(!r.ok) return r.text().then(function(t){ throw new Error("Save failed ("+r.status+"). "+t); });
+        return r.status===204?[]:r.json();
+      });
+  }
+  function nibOpenForm(p){
+    nibEditId=p?p.id:null;
+    nf.title.textContent=p?"Edit "+p.nsn:"Add a product";
+    nf.nsn.value=p?p.nsn:""; nf.desc.value=p?p.description:""; nf.qty.value=p?(Number(p.annual_qty)||0):"";
+    nf.pack.value=p?(p.pack_size||""):""; nf.npa.value=p?(p.producing_npa||""):"";
+    var u=p&&p.unit?String(p.unit).toUpperCase():"CASE";
+    if(![].some.call(nf.unit.options,function(o){return o.value===u;})) nf.unit.insertAdjacentHTML("beforeend",'<option value="'+esc(u)+'">'+esc(u)+'</option>');
+    nf.unit.value=u;
+    var s=p?(p.source||"Attestation"):"Recommended";
+    if(![].some.call(nf.source.options,function(o){return o.value===s;})) nf.source.insertAdjacentHTML("beforeend",'<option value="'+esc(s)+'">'+esc(s)+'</option>');
+    nf.source.value=s;
+    nf.codes.value=p?(p.alt_codes||[]).join(", "):""; nf.notes.value=p?(p.notes||""):"";
+    nf.del.hidden=!p; nf.status.textContent=""; nf.form.hidden=false;
+    nf.form.scrollIntoView({behavior:"smooth",block:"start"}); nf.nsn.focus();
+  }
+  function nibCloseForm(){ nf.form.hidden=true; nibEditId=null; }
+  function nibSave(){
+    var nsn=nf.nsn.value.trim(), desc=nf.desc.value.trim(), qty=parseFloat(nf.qty.value);
+    if(!nsn||!desc){ nf.status.textContent="NSN and description are required."; nf.status.style.color="var(--danger)"; return; }
+    if(isNaN(qty)||qty<0){ nf.status.textContent="Enter the annual quantity needed (0 or more)."; nf.status.style.color="var(--danger)"; return; }
+    var row={ nsn:nsn, description:desc, annual_qty:qty, pack_size:nf.pack.value.trim(), unit:nf.unit.value,
+      producing_npa:nf.npa.value.trim(), source:nf.source.value, notes:nf.notes.value.trim()||null,
+      alt_codes:nf.codes.value.split(",").map(function(s){return s.trim();}).filter(Boolean),
+      updated_at:new Date().toISOString() };
+    var req;
+    if(nibEditId){ req=nibWrite("PATCH","?id=eq."+encodeURIComponent(nibEditId),row); }
+    else {
+      row.site=currentSite;
+      row.line_no=(nibProducts||[]).reduce(function(m,p){ return Math.max(m,Number(p.line_no)||0); },0)+1;
+      req=nibWrite("POST","",row);
+    }
+    nf.save.disabled=true; nf.status.style.color="var(--ink-soft)"; nf.status.textContent="Saving…";
+    req.then(function(){ nf.save.disabled=false; nibCloseForm(); nibProducts=null; loadNib(); })
+       .catch(function(err){ nf.save.disabled=false; nf.status.style.color="var(--danger)"; nf.status.textContent=err.message; console.error(err); });
+  }
+  function nibRemove(){
+    if(!nibEditId) return;
+    if(!confirm("Remove "+nf.nsn.value+" from the NIB product list? Purchases already logged are not deleted.")) return;
+    nibWrite("DELETE","?id=eq."+encodeURIComponent(nibEditId)).then(function(){ nibCloseForm(); nibProducts=null; loadNib(); })
+      .catch(function(err){ nf.status.style.color="var(--danger)"; nf.status.textContent=err.message; });
+  }
+  $("nib-add").addEventListener("click",function(){ nibOpenForm(null); });
+  nf.save.addEventListener("click",nibSave);
+  nf.cancel.addEventListener("click",nibCloseForm);
+  nf.del.addEventListener("click",nibRemove);
+  $("nib-rows").addEventListener("click",function(e){
+    var b=e.target.closest(".nib-edit"); if(!b) return;
+    var id=b.getAttribute("data-id");
+    var p=(nibProducts||[]).filter(function(x){ return String(x.id)===id; })[0];
+    if(p) nibOpenForm(p);
+  });
+
+  elNibPeriod.addEventListener("change",loadNib);
+  elNibSearch.addEventListener("input",function(){ if(nibProducts) renderNib(); });
+  $("nib-csv").addEventListener("click",nibCSV);
 
   /* ---------- tabs (Procurement Ledger / Year Tracking / Invoice Records) ---------- */
   function setActiveTab(tab){
@@ -1205,8 +1552,10 @@
     });
     if(tab==="yearly") loadYearly();
     if(tab==="records") loadRecords();
+    if(tab==="nib") loadNib();
   }
-  var tabLedgerBtn=$("tab-btn-ledger"), tabYearlyBtn=$("tab-btn-yearly"), tabRecordsBtn=$("tab-btn-records");
+  var tabLedgerBtn=$("tab-btn-ledger"), tabYearlyBtn=$("tab-btn-yearly"), tabRecordsBtn=$("tab-btn-records"), tabNibBtn=$("tab-btn-nib");
+  if(tabNibBtn) tabNibBtn.addEventListener("click",function(){ setActiveTab("nib"); });
   if(tabLedgerBtn) tabLedgerBtn.addEventListener("click",function(){ setActiveTab("ledger"); });
   if(tabYearlyBtn) tabYearlyBtn.addEventListener("click",function(){ setActiveTab("yearly"); });
   if(tabRecordsBtn) tabRecordsBtn.addEventListener("click",function(){ setActiveTab("records"); });
