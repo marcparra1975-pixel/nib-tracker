@@ -565,6 +565,8 @@
           <div class="field c6"><label for="nf-source">Source</label>
             <select id="nf-source"><option value="Recommended">Recommended (CNA / NPA)</option><option value="Attestation">Attestation Form</option><option value="Site request">Site request</option></select></div>
           <div class="field c6"><label for="nf-codes">Other part #s for this item (comma-separated)</label><input type="text" id="nf-codes" placeholder="e.g. 1005290219, VB-20HSTP" autocomplete="off" /></div>
+          <div class="field c12"><label for="nf-words">Match by name (group any SKU / NSN with these words)</label><input type="text" id="nf-words" placeholder="e.g. glove nitrile small/sm   ·   tissue toilet coreless   ·   purell/sanitizer foam/refill" autocomplete="off" />
+            <div class="meta" style="margin-top:4px;">Ledger lines whose product name contains <b>all</b> these words count toward this item. Use <b>/</b> for &ldquo;either&rdquo; (small/sm), a leading <b>-</b> to exclude (-x -xl), and <b>;</b> to add another rule.</div></div>
           <div class="field c12"><label for="nf-notes">Notes</label><input type="text" id="nf-notes" placeholder="e.g. Recommended by SourceAmerica 9/2026 to replace Spartan glass cleaner" autocomplete="off" /></div>
           <div class="c12 nib-form-actions">
             <button class="btn-add" id="nf-save">Save product</button>
@@ -1323,6 +1325,23 @@
   var elNibPeriod=$("nib-period"), elNibSearch=$("nib-search");
 
   function nibNorm(s){ return String(s==null?"":s).toUpperCase().replace(/[^A-Z0-9]/g,""); }
+  /* name grouping: "glove nitrile small/sm -x ; other rule" */
+  function nibTokens(s){ return String(s==null?"":s).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
+  function nibParseWords(txt){
+    return String(txt||"").split(";").map(function(part){
+      var need=[], not=[];
+      part.toLowerCase().split(/[\s,]+/).filter(Boolean).forEach(function(w){
+        if(w.charAt(0)==="-"){ w=w.slice(1).replace(/[^a-z0-9\/]/g,""); if(w) not.push(w.split("/").filter(Boolean)); }
+        else { var alts=w.replace(/[^a-z0-9\/]/g,"").split("/").filter(Boolean); if(alts.length) need.push(alts); }
+      });
+      return { need:need, not:not };
+    }).filter(function(r){ return r.need.length; });
+  }
+  function nibWordIn(alts,toks){ return alts.some(function(a){ return toks.some(function(t){ return t===a || (a.length>=4 && t.indexOf(a)===0); }); }); }
+  function nibRuleHit(rule,toks){
+    return rule.need.every(function(alts){ return nibWordIn(alts,toks); }) &&
+           !rule.not.some(function(alts){ return nibWordIn(alts,toks); });
+  }
   function nibFmt(n){ return (Math.round((Number(n)||0)*10)/10).toLocaleString("en-US"); }
   /* ---- counting window: since first purchase / contract year / custom ---- */
   var MON3=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -1428,10 +1447,17 @@
       return row;
     });
     var nsnKeys=list.map(function(r){ return { k:nibNorm(r.p.nsn), row:r }; });
+    var wordRules=[];
+    list.forEach(function(r){ nibParseWords(r.p.match_words).forEach(function(rule){ wordRules.push({ rule:rule, row:r }); }); });
     var unmatched=[];
     nibPurchases.forEach(function(e){
       var item=nibNorm(e.item_no), prod=nibNorm(e.product), hit=byCode[item]||null;
       if(!hit){ for(var i=0;i<nsnKeys.length;i++){ var k=nsnKeys[i].k; if((item&&item.indexOf(k)>=0)||prod.indexOf(k)>=0){ hit=nsnKeys[i].row; break; } } }
+      if(!hit && wordRules.length){                    // group by product name: most specific rule wins
+        var toks=nibTokens(e.product), best=null, bestN=-1;
+        wordRules.forEach(function(w){ if(w.rule.need.length>bestN && nibRuleHit(w.rule,toks)){ best=w.row; bestN=w.rule.need.length; } });
+        hit=best;
+      }
       if(hit){ hit.bought+=Number(e.qty)||0; hit.lines++; } else unmatched.push(e);
     });
     list.forEach(function(r){
@@ -1512,19 +1538,19 @@
 
   function nibCSV(){
     if(!nibProducts||!nibProducts.length){ alert("No NIB products loaded yet."); return; }
-    var c=nibCompute(), headers=["Line","NSN","Description","Pack Size","Unit","Producing NPA","Annual Needed","Purchased","Remaining","% Complete","Needed To Date","Status","Source","Other Part #s","Notes"];
+    var c=nibCompute(), headers=["Line","NSN","Description","Pack Size","Unit","Producing NPA","Annual Needed","Purchased","Remaining","% Complete","Needed To Date","Status","Source","Other Part #s","Match Words","Notes"];
     var cell=function(v){ v=String(v==null?"":v).replace(/"/g,'""'); return /[",\n]/.test(v)?'"'+v+'"':v; };
     var lines=['"Site: '+activeName().replace(/"/g,'""')+'","'+c.range.label.replace(/"/g,'""')+'"', headers.join(",")];
     c.list.forEach(function(r){
       lines.push([r.p.line_no,r.p.nsn,r.p.description,r.p.pack_size,r.p.unit,r.p.producing_npa,r.need,r.bought,r.left,
-        r.pct==null?"":(r.pct*100).toFixed(1)+"%",r.expected,r.status,r.p.source||"Attestation",(r.p.alt_codes||[]).join("; "),r.p.notes].map(cell).join(","));
+        r.pct==null?"":(r.pct*100).toFixed(1)+"%",r.expected,r.status,r.p.source||"Attestation",(r.p.alt_codes||[]).join("; "),r.p.match_words||"",r.p.notes].map(cell).join(","));
     });
     downloadBlob("﻿"+lines.join("\r\n"), (activeName().replace(/[^\w-]+/g,"-")||"Site")+"-NIB-Products-"+c.range.from+"-to-"+isoAddDays(c.range.toEx,-1)+".csv", "text/csv;charset=utf-8;");
   }
   /* ---------- add / edit / remove products (writes only to nib_products) ---------- */
   var nibEditId=null;
   var nf={ form:$("nib-form"), title:$("nib-form-title"), nsn:$("nf-nsn"), desc:$("nf-desc"), qty:$("nf-qty"), pack:$("nf-pack"),
-           unit:$("nf-unit"), npa:$("nf-npa"), source:$("nf-source"), codes:$("nf-codes"), notes:$("nf-notes"),
+           unit:$("nf-unit"), npa:$("nf-npa"), source:$("nf-source"), codes:$("nf-codes"), words:$("nf-words"), notes:$("nf-notes"),
            save:$("nf-save"), cancel:$("nf-cancel"), del:$("nf-delete"), status:$("nf-status") };
   function nibWrite(method,query,body){
     return fetch(NIB_REST+(query||""),{ method:method, headers:sbHeaders({"Prefer":"return=representation"}),
@@ -1545,7 +1571,7 @@
     var s=p?(p.source||"Attestation"):"Recommended";
     if(![].some.call(nf.source.options,function(o){return o.value===s;})) nf.source.insertAdjacentHTML("beforeend",'<option value="'+esc(s)+'">'+esc(s)+'</option>');
     nf.source.value=s;
-    nf.codes.value=p?(p.alt_codes||[]).join(", "):""; nf.notes.value=p?(p.notes||""):"";
+    nf.codes.value=p?(p.alt_codes||[]).join(", "):""; nf.words.value=p?(p.match_words||""):""; nf.notes.value=p?(p.notes||""):"";
     nf.del.hidden=!p; nf.status.textContent=""; nf.form.hidden=false;
     nf.form.scrollIntoView({behavior:"smooth",block:"start"}); nf.nsn.focus();
   }
@@ -1557,6 +1583,7 @@
     var row={ nsn:nsn, description:desc, annual_qty:qty, pack_size:nf.pack.value.trim(), unit:nf.unit.value,
       producing_npa:nf.npa.value.trim(), source:nf.source.value, notes:nf.notes.value.trim()||null,
       alt_codes:nf.codes.value.split(",").map(function(s){return s.trim();}).filter(Boolean),
+      match_words:nf.words.value.trim()||null,
       updated_at:new Date().toISOString() };
     var req;
     if(nibEditId){ req=nibWrite("PATCH","?id=eq."+encodeURIComponent(nibEditId),row); }
