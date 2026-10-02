@@ -308,7 +308,7 @@
         </div>
       </div>
       <div class="picker">
-        <label for="year">Fiscal year</label>
+        <label for="year">Contract year</label>
         <select id="year" aria-label="Select year"></select>
       </div>
     </div>
@@ -487,7 +487,7 @@
         <table class="months-table">
           <thead>
             <tr>
-              <th>Fiscal year</th>
+              <th>Contract year (Oct&ndash;Sep)</th>
               <th class="r">Line items</th>
               <th class="r">Units</th>
               <th class="r">Total spend</th>
@@ -750,7 +750,16 @@
 
   var entries = [];                 // rows for current site + year (from cloud)
   var currentSite = SITES[0];
-  var currentYear = new Date().getFullYear();
+  /* Contract / fiscal year runs Oct 1 - Sep 30. "FY 2026" = Oct 1, 2025 - Sep 30, 2026. */
+  var FY_MONTHS = ["October","November","December","January","February","March",
+                   "April","May","June","July","August","September"];
+  function fyOf(d){ var p=String(d).split("-"), y=parseInt(p[0],10), m=parseInt(p[1],10); return m>=10?y+1:y; }
+  function fmIdx(d){ return (parseInt(String(d).split("-")[1],10)+2)%12; }      // Oct=0 ... Sep=11
+  function fmYear(i,fy){ return i<3?fy-1:fy; }                                   // calendar year of fiscal month i
+  function fmLabel(i,fy){ return FY_MONTHS[i]+" "+fmYear(i,fy); }
+  function fyRangeLabel(fy){ return "Oct "+(fy-1)+" \u2013 Sep "+fy; }
+  var currentYear = (function(){ var d=new Date(); return d.getMonth()>=9?d.getFullYear()+1:d.getFullYear(); })();
+  try{ var _fy=parseInt(localStorage.getItem("ledger_fy"),10); if(_fy>2000&&_fy<2100) currentYear=_fy; }catch(e){}
   var busy = false;
 
   var $ = function(id){ return document.getElementById(id); };
@@ -768,7 +777,7 @@
   }
   function sbSelect(site,year){
     var url=REST+"?select=*&site=eq."+encodeURIComponent(site)+
-            "&purchase_date=gte."+year+"-01-01&purchase_date=lte."+year+"-12-31"+
+            "&purchase_date=gte."+(year-1)+"-10-01&purchase_date=lte."+year+"-09-30"+
             "&order=purchase_date.asc";
     return fetch(url,{headers:sbHeaders()}).then(function(r){ if(!r.ok) throw new Error("load "+r.status); return r.json(); });
   }
@@ -821,7 +830,7 @@
 
   function sbDeleteYear(site,year){
     var url=REST+"?site=eq."+encodeURIComponent(site)+
-            "&purchase_date=gte."+year+"-01-01&purchase_date=lte."+year+"-12-31";
+            "&purchase_date=gte."+(year-1)+"-10-01&purchase_date=lte."+year+"-09-30";
     return fetch(url,{method:"DELETE",headers:sbHeaders()})
       .then(function(r){ if(!r.ok) throw new Error("clear "+r.status); });
   }
@@ -852,7 +861,7 @@
     elSite.innerHTML=SITES.map(function(s){ return '<option value="'+esc(s)+'"'+(s===currentSite?" selected":"")+'>'+esc(SITE_LABELS[s]||s)+'</option>'; }).join("");
   }
   function yearRange(){
-    var now=new Date().getFullYear(), list=[];
+    var d=new Date(), now=d.getMonth()>=9?d.getFullYear()+1:d.getFullYear(), list=[];
     for(var y=now-3;y<=now+2;y++) list.push(y);
     return list;
   }
@@ -860,7 +869,7 @@
     var list=yearRange().slice();
     if(list.indexOf(currentYear)<0) list.push(currentYear);
     list.sort(function(a,b){return b-a;});
-    elYear.innerHTML=list.map(function(y){ return '<option value="'+y+'"'+(y===currentYear?" selected":"")+'>'+y+"</option>"; }).join("");
+    elYear.innerHTML=list.map(function(y){ return '<option value="'+y+'"'+(y===currentYear?" selected":"")+'>FY '+y+' ('+fyRangeLabel(y)+')</option>'; }).join("");
   }
 
   /* ---------- load from cloud ---------- */
@@ -893,7 +902,7 @@
     var row={ site:currentSite, purchase_date:fDate.value, product:fProduct.value.trim(),
       item_no:fItem.value.trim(), uom:fUom.value.trim(), vendor:fVendor.value.trim(),
       qty:parseFloat(fQty.value)||0, unit_price:parseFloat(fPrice.value)||0 };
-    var y=ymd(row.purchase_date).y;
+    var y=fyOf(row.purchase_date);
     sbInsert(row).then(function(){
       fProduct.value=""; fItem.value=""; fUom.value=""; fQty.value=""; fPrice.value="";
       busy=false; updateLineTotal(); fProduct.focus();
@@ -959,20 +968,20 @@
   function renderChart(){
     var wrap=$("chart-wrap"); var ys=yearEntries();
     var totals=new Array(12).fill(0);
-    ys.forEach(function(e){ totals[ymd(e.date).m]+=lineTotal(e); });
+    ys.forEach(function(e){ totals[fmIdx(e.date)]+=lineTotal(e); });
     var max=Math.max.apply(null,totals);
-    $("chart-cap").textContent="NIB spend by month for "+currentYear+(ys.length?"":" \u2014 no entries yet");
+    $("chart-cap").textContent="NIB spend by month for FY "+currentYear+" ("+fyRangeLabel(currentYear)+")"+(ys.length?"":" \u2014 no entries yet");
     var budget=getBudget();
     $("chart-legend").style.display=budget>0?"flex":"none";
     if(max<=0){ wrap.innerHTML='<div class="chart-empty">Add purchases above and your monthly bars will appear here.</div>'; return; }
     var overFlags=totals.map(function(v){ return budget>0&&v>budget; });
-    var cats=MONTHS.map(function(m){ return m.slice(0,3); });
+    var cats=FY_MONTHS.map(function(m){ return m.slice(0,3); });
     wrap.innerHTML=buildExcelBarChart({
       categories:cats, values:totals, overFlags:overFlags, budget:budget,
-      ariaLabel:"Monthly NIB spend "+currentYear,
+      ariaLabel:"Monthly NIB spend FY "+currentYear,
       tooltipFn:function(i){
         var v=totals[i], over=budget>0&&v>budget;
-        return MONTHS[i]+" "+currentYear+": "+money(v)+(budget>0?(over?" (over by "+money(v-budget)+")":" ("+money(budget-v)+" under)"):"");
+        return fmLabel(i,currentYear)+": "+money(v)+(budget>0?(over?" (over by "+money(v-budget)+")":" ("+money(budget-v)+" under)"):"");
       }
     });
   }
@@ -995,7 +1004,7 @@
     var totals={}, cnt={}, units={};
     years.forEach(function(y){ totals[y]=0; cnt[y]=0; units[y]=0; });
     yearlyEntries.forEach(function(e){
-      var y=ymd(e.date).y;
+      var y=fyOf(e.date);
       if(!(y in totals)){ totals[y]=0; cnt[y]=0; units[y]=0; years.push(y); }
       totals[y]+=e.qty*e.price; cnt[y]+=1; units[y]+=e.qty;
     });
@@ -1009,7 +1018,7 @@
     } else {
       wrap.innerHTML=buildExcelBarChart({
         categories:years, values:values, ariaLabel:"NIB spend by fiscal year for "+activeName(),
-        tooltipFn:function(i){ return years[i]+": "+money(values[i]); }
+        tooltipFn:function(i){ return "FY "+years[i]+" ("+fyRangeLabel(years[i])+"): "+money(values[i]); }
       });
     }
     $("yearly-chart-cap").textContent="Total NIB spend by fiscal year for "+activeName();
@@ -1024,7 +1033,7 @@
         var pctTxt=prev>0?(Math.abs(pct).toFixed(1)+"%"):"n/a";
         deltaHtml='<span class="num '+dirCls+'" style="font-weight:600;">'+arrow+' '+money(Math.abs(d))+' ('+pctTxt+')</span>';
       }
-      rowsHtml+='<tr class="'+(t===0?"zero":"")+'"><td>'+y+'</td>'+
+      rowsHtml+='<tr class="'+(t===0?"zero":"")+'"><td>FY '+y+' <span class="meta">('+fyRangeLabel(y)+')</span></td>'+
         '<td class="r num">'+cnt[y]+'</td>'+
         '<td class="r num">'+units[y].toLocaleString("en-US")+'</td>'+
         '<td class="r num">'+money(t)+'</td>'+
@@ -1117,19 +1126,19 @@
   function renderMonths(){
     var body=$("months-rows"); var ys=yearEntries();
     var tot=new Array(12).fill(0), cnt=new Array(12).fill(0), units=new Array(12).fill(0);
-    ys.forEach(function(e){ var m=ymd(e.date).m; tot[m]+=lineTotal(e); cnt[m]+=1; units[m]+=(Number(e.qty)||0); });
-    $("months-cap").textContent="Every month of "+currentYear+" with its total and the running month-to-month total";
+    ys.forEach(function(e){ var m=fmIdx(e.date); tot[m]+=lineTotal(e); cnt[m]+=1; units[m]+=(Number(e.qty)||0); });
+    $("months-cap").textContent="Every month of FY "+currentYear+" ("+fyRangeLabel(currentYear)+") with its total and the running month-to-month total";
     var running=0, html="", gc=0, gu=0;
     for(var m=0;m<12;m++){
       running+=tot[m]; gc+=cnt[m]; gu+=units[m];
       html+='<tr class="'+(tot[m]===0?"zero":"")+'">'+
-        '<td>'+MONTHS[m]+' '+currentYear+'</td>'+
+        '<td>'+fmLabel(m,currentYear)+'</td>'+
         '<td class="r num">'+cnt[m]+'</td>'+
         '<td class="r num">'+units[m].toLocaleString("en-US")+'</td>'+
         '<td class="r num">'+money(tot[m])+'</td>'+
         '<td class="r num">'+money(running)+'</td></tr>';
     }
-    html+='<tr class="yr"><td>'+currentYear+' total</td><td class="r num">'+gc+'</td>'+
+    html+='<tr class="yr"><td>FY '+currentYear+' total</td><td class="r num">'+gc+'</td>'+
       '<td class="r num">'+gu.toLocaleString("en-US")+'</td>'+
       '<td class="r num amt">'+money(running)+'</td><td class="r num amt">'+money(running)+'</td></tr>';
     body.innerHTML=html;
@@ -1142,7 +1151,7 @@
       var name=(e.vendor&&e.vendor.trim())?e.vendor.trim():"Unspecified vendor"; byV[name]=(byV[name]||0)+lineTotal(e); });
     var rows=Object.keys(byV).map(function(k){ return {name:k,total:byV[k]}; })
       .filter(function(r){return r.total>0;}).sort(function(a,b){return b.total-a.total;});
-    $("vendor-cap").textContent="Which NPAs and distributors your NIB dollars go to in "+currentYear;
+    $("vendor-cap").textContent="Which NPAs and distributors your NIB dollars go to in FY "+currentYear+" ("+fyRangeLabel(currentYear)+")";
     if(!rows.length){ list.innerHTML='<div style="text-align:center;padding:24px 10px;color:var(--ink-soft);font-size:14px;">No vendor spend yet. Add the vendor when you log a purchase and it will break down here.</div>'; return; }
     var grand=rows.reduce(function(s,r){return s+r.total;},0), top=rows[0].total;
     list.innerHTML=rows.map(function(r){
@@ -1166,16 +1175,16 @@
     $("s-count").textContent=ys.length.toLocaleString("en-US");
     $("s-units").textContent=yUnits.toLocaleString("en-US");
     $("s-total").textContent=money(yTotal);
-    $("s-year-label").textContent=currentYear;
+    $("s-year-label").textContent="FY "+currentYear;
 
-    var present={}; ys.forEach(function(e){ present[ymd(e.date).m]=true; });
+    var present={}; ys.forEach(function(e){ present[fmIdx(e.date)]=true; });
     var opts='<option value="all">All months</option>';
-    Object.keys(present).map(Number).sort(function(a,b){return a-b;}).forEach(function(m){ opts+='<option value="'+m+'">'+MONTHS[m]+'</option>'; });
+    Object.keys(present).map(Number).sort(function(a,b){return a-b;}).forEach(function(m){ opts+='<option value="'+m+'">'+FY_MONTHS[m]+'</option>'; });
     elMonthFilter.innerHTML=opts;
     if(present[monthFilterVal]||monthFilterVal==="all") elMonthFilter.value=monthFilterVal;
 
     var groups={};
-    ys.forEach(function(e){ var m=ymd(e.date).m; if(monthFilterVal!=="all"&&String(m)!==String(monthFilterVal))return; (groups[m]=groups[m]||[]).push(e); });
+    ys.forEach(function(e){ var m=fmIdx(e.date); if(monthFilterVal!=="all"&&String(m)!==String(monthFilterVal))return; (groups[m]=groups[m]||[]).push(e); });
     var rows=$("rows"), months=Object.keys(groups).map(Number).sort(function(a,b){return a-b;});
 
     if(!months.length){
@@ -1187,7 +1196,7 @@
       var listM=groups[m],mSub=0,mUnits=0;
       listM.forEach(function(e){ mSub+=lineTotal(e); mUnits+=(Number(e.qty)||0); });
       grand+=mSub;
-      html+='<tr class="month-band"><td colspan="4">'+MONTHS[m]+' '+currentYear+'</td><td class="r msub">'+mUnits.toLocaleString("en-US")+' units</td><td class="r msub num">'+money(mSub)+'</td><td></td></tr>';
+      html+='<tr class="month-band"><td colspan="4">'+fmLabel(m,currentYear)+'</td><td class="r msub">'+mUnits.toLocaleString("en-US")+' units</td><td class="r msub num">'+money(mSub)+'</td><td></td></tr>';
       listM.forEach(function(e){
         var details=[]; if(e.item) details.push("Mfg "+esc(e.item)); if(e.uom) details.push(esc(e.uom));
         html+='<tr>'+
@@ -1199,9 +1208,9 @@
           '<td class="r num">'+money(lineTotal(e))+'</td>'+
           '<td class="r"><button class="del" title="Remove entry" data-id="'+e.id+'">&times;</button></td></tr>';
       });
-      html+='<tr class="subtotal-row"><td colspan="5" class="r">'+MONTHS[m]+' subtotal</td><td class="r num">'+money(mSub)+'</td><td></td></tr>';
+      html+='<tr class="subtotal-row"><td colspan="5" class="r">'+FY_MONTHS[m]+' subtotal</td><td class="r num">'+money(mSub)+'</td><td></td></tr>';
     });
-    var label=(monthFilterVal==="all")?currentYear+" total":"Filtered total";
+    var label=(monthFilterVal==="all")?"FY "+currentYear+" total":"Filtered total";
     html+='<tr class="grand"><td colspan="5" class="r">'+label+'</td><td class="r num amt">'+money(grand)+'</td><td></td></tr>';
     rows.innerHTML=html;
     Array.prototype.forEach.call(rows.querySelectorAll(".del"),function(b){ b.addEventListener("click",function(){ removeEntry(b.getAttribute("data-id")); }); });
@@ -1212,7 +1221,7 @@
     return yearEntries().map(function(e){
       return { Date:e.date, Product:e.product, "Mfg / Item Number":e.item||"", "Unit of Measure":e.uom||"",
         "Vendor (NPA)":e.vendor||"", Quantity:Number(e.qty)||0, "Unit Price":Number(e.price)||0,
-        "Line Total":lineTotal(e), Month:MONTHS[ymd(e.date).m] };
+        "Line Total":lineTotal(e), Month:MONTHS[ymd(e.date).m]+" "+ymd(e.date).y };
     });
   }
   function downloadBlob(content,filename,mime){
@@ -1222,14 +1231,14 @@
   }
   function fileSlug(){
     var s=activeName().replace(/[^\w\s-]/g,"").trim().replace(/\s+/g,"-");
-    return (s||"Site")+"-NIB-"+currentYear;
+    return (s||"Site")+"-NIB-FY"+currentYear;
   }
-  function noData(){ alert("No entries to export for "+currentYear+" at "+activeName()+" yet."); }
+  function noData(){ alert("No entries to export for FY "+currentYear+" at "+activeName()+" yet."); }
 
   function toCSV(){
     var data=exportRows(); if(!data.length){ noData(); return; }
     var headers=["Date","Product","Mfg / Item Number","Unit of Measure","Vendor (NPA)","Quantity","Unit Price","Line Total","Month"];
-    var lines=['"Site: '+activeName().replace(/"/g,'""')+'","Fiscal year '+currentYear+'"'];
+    var lines=['"Site: '+activeName().replace(/"/g,'""')+'","FY '+currentYear+' ('+fyRangeLabel(currentYear)+')"'];
     lines.push(headers.join(","));
     var grand=0;
     data.forEach(function(r){
@@ -1241,7 +1250,7 @@
       }).join(","));
     });
     lines.push(new Array(headers.length).fill("").join(","));
-    lines.push('"NIB TOTAL '+currentYear+'",,,,,,,'+grand.toFixed(2)+',');
+    lines.push('"NIB TOTAL FY '+currentYear+'",,,,,,,'+grand.toFixed(2)+',');
     downloadBlob("\uFEFF"+lines.join("\r\n"), fileSlug()+".csv", "text/csv;charset=utf-8;");
   }
   function toXLSX(){
@@ -1250,25 +1259,25 @@
     var grand=data.reduce(function(s,r){return s+r["Line Total"];},0);
     var units=data.reduce(function(s,r){return s+r.Quantity;},0);
     var aoa=[["NIB Procurement Ledger - AbilityOne Mandatory Source Spend"],
-             ["Site: "+activeName()],["Fiscal year "+currentYear],[],
+             ["Site: "+activeName()],["FY "+currentYear+" ("+fyRangeLabel(currentYear)+")"],[],
              ["Date","Product","Mfg / Item Number","Unit of Measure","Vendor (NPA)","Quantity","Unit Price","Line Total","Month"]];
     data.forEach(function(r){ aoa.push([r.Date,r.Product,r["Mfg / Item Number"],r["Unit of Measure"],r["Vendor (NPA)"],r.Quantity,r["Unit Price"],r["Line Total"],r.Month]); });
     aoa.push([]); aoa.push(["","","","","TOTALS",units,"",grand,""]);
     var ws=XLSX.utils.aoa_to_sheet(aoa);
     ws["!cols"]=[{wch:12},{wch:30},{wch:20},{wch:15},{wch:22},{wch:10},{wch:12},{wch:13},{wch:12}];
     for(var R=5; R<aoa.length; R++){ ["G","H"].forEach(function(col){ var cell=ws[col+(R+1)]; if(cell&&typeof cell.v==="number") cell.z='"$"#,##0.00'; }); }
-    var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,String(currentYear));
+    var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"FY"+currentYear);
     var tot=new Array(12).fill(0), cnt=new Array(12).fill(0);
-    data.forEach(function(r){ var mi=MONTHS.indexOf(r.Month); if(mi>=0){ tot[mi]+=r["Line Total"]; cnt[mi]+=1; } });
-    var run=0, maoa=[["12-Month Summary - "+currentYear],["Site: "+activeName()],[],["Month","Line items","Monthly total","Running total"]];
-    for(var mm=0;mm<12;mm++){ run+=tot[mm]; maoa.push([MONTHS[mm], cnt[mm], tot[mm], run]); }
+    data.forEach(function(r){ var mi=fmIdx(r.Date); tot[mi]+=r["Line Total"]; cnt[mi]+=1; });
+    var run=0, maoa=[["12-Month Summary - FY "+currentYear+" ("+fyRangeLabel(currentYear)+")"],["Site: "+activeName()],[],["Month","Line items","Monthly total","Running total"]];
+    for(var mm=0;mm<12;mm++){ run+=tot[mm]; maoa.push([fmLabel(mm,currentYear), cnt[mm], tot[mm], run]); }
     maoa.push([]); maoa.push(["YEAR TOTAL","",run,run]);
     var wsm=XLSX.utils.aoa_to_sheet(maoa); wsm["!cols"]=[{wch:14},{wch:12},{wch:14},{wch:14}];
     for(var r3=4;r3<maoa.length;r3++){ ["C","D"].forEach(function(col){ var c=wsm[col+(r3+1)]; if(c&&typeof c.v==="number") c.z='"$"#,##0.00'; }); }
     XLSX.utils.book_append_sheet(wb,wsm,"12-Month Summary");
     var byV={}; data.forEach(function(r){ var name=(r["Vendor (NPA)"]&&String(r["Vendor (NPA)"]).trim())?String(r["Vendor (NPA)"]).trim():"Unspecified vendor"; byV[name]=(byV[name]||0)+r["Line Total"]; });
     var vrows=Object.keys(byV).map(function(k){return [k,byV[k]];}).sort(function(a,b){return b[1]-a[1];});
-    var vaoa=[["Spend by vendor - "+currentYear],[],["Vendor (NPA)","Total spend","% of year"]];
+    var vaoa=[["Spend by vendor - FY "+currentYear],[],["Vendor (NPA)","Total spend","% of year"]];
     vrows.forEach(function(v){ vaoa.push([v[0],v[1],grand>0?v[1]/grand:0]); });
     vaoa.push([]); vaoa.push(["TOTAL",grand,grand>0?1:0]);
     var wsv=XLSX.utils.aoa_to_sheet(vaoa); wsv["!cols"]=[{wch:30},{wch:14},{wch:12}];
@@ -1281,8 +1290,8 @@
   $("btn-xlsx").addEventListener("click",toXLSX);
   $("btn-clear").addEventListener("click",function(){
     if(busy) return;
-    if(!yearEntries().length){ alert("Nothing to clear for "+currentYear+" at "+activeName()+"."); return; }
-    if(confirm("Delete ALL "+currentYear+" entries for \""+activeName()+"\" from the cloud? This affects everyone and cannot be undone.\n\nTip: export to Excel first.")){
+    if(!yearEntries().length){ alert("Nothing to clear for FY "+currentYear+" at "+activeName()+"."); return; }
+    if(confirm("Delete ALL FY "+currentYear+" ("+fyRangeLabel(currentYear)+") entries for \""+activeName()+"\" from the cloud? This affects everyone and cannot be undone.\n\nTip: export to Excel first.")){
       busy=true; status("saving");
       sbDeleteYear(currentSite,currentYear).then(function(){ busy=false; return loadEntries(); })
         .catch(function(err){ busy=false; status("error"); alert("Could not clear. Try again."); console.error(err); });
@@ -1302,7 +1311,7 @@
     if(t==="records") loadRecords();
     if(t==="nib") loadNib();
   });
-  elYear.addEventListener("change",function(){ currentYear=parseInt(elYear.value,10); elMonthFilter.value="all"; loadEntries(); });
+  elYear.addEventListener("change",function(){ currentYear=parseInt(elYear.value,10); try{ localStorage.setItem("ledger_fy",currentYear); }catch(e){} elMonthFilter.value="all"; loadEntries(); });
   elMonthFilter.addEventListener("change",render);
   $("btn-refresh").addEventListener("click",function(){
     if(busy) return;
