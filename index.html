@@ -618,8 +618,11 @@
      ========================================================= */
   var SB_URL = "https://cmglzngevatkjwtwyxnb.supabase.co";
   var SB_KEY = "sb_publishable_mnVHxB09Db-PG9ToKVAFKw_7hIp4N64";
+  /* Fallback only. The live site list comes from the "sites" table in Supabase,
+     filtered by row-level security to the sites this login is assigned to. */
   var SITES  = ["Ft. Carson - Evans Army Hospital"];
   var SITE_LABELS = { "Ft. Carson - Evans Army Hospital": "Evans" };
+  var TEMPLATE_SITE = "Ft. Carson - Evans Army Hospital";   // source for "Copy product list"
   var REST   = SB_URL + "/rest/v1/purchases";
 
   /* ---------- Supabase Auth (login) ---------- */
@@ -857,7 +860,24 @@
   function setBudget(v){ try{ if(v>0) localStorage.setItem(budKey(),v); else localStorage.removeItem(budKey()); }catch(e){} }
 
   /* ---------- dropdowns ---------- */
+  function loadSites(){
+    return fetch(SB_URL+"/rest/v1/sites?select=site,label&order=sort.asc,label.asc",{headers:sbHeaders()})
+      .then(function(r){ if(r.status===404) return null; if(!r.ok) throw new Error("sites "+r.status); return r.json(); })
+      .then(function(rows){
+        if(!rows) return;                       // sites table not set up yet: keep fallback list
+        SITES=rows.map(function(x){ return x.site; });
+        SITE_LABELS={}; rows.forEach(function(x){ SITE_LABELS[x.site]=x.label||x.site; });
+        var saved=null; try{ saved=localStorage.getItem("ledger_site"); }catch(e){}
+        currentSite = (saved&&SITES.indexOf(saved)>=0) ? saved : (SITES[0]||"");
+      })
+      .catch(function(err){ console.error(err); });
+  }
   function fillSites(){
+    if(!SITES.length){
+      elSite.innerHTML='<option value="">No site assigned</option>';
+      alert("Your login is not assigned to a site yet. Ask the Ledger owner to add you.");
+      return;
+    }
     elSite.innerHTML=SITES.map(function(s){ return '<option value="'+esc(s)+'"'+(s===currentSite?" selected":"")+'>'+esc(SITE_LABELS[s]||s)+'</option>'; }).join("");
   }
   function yearRange(){
@@ -1306,6 +1326,8 @@
 
   elSite.addEventListener("change",function(){
     currentSite=elSite.value; elMonthFilter.value="all"; loadEntries();
+    try{ localStorage.setItem("ledger_site",currentSite); }catch(e){}
+    nibProducts=null; nibFirstFor=null;
     var t=document.body.getAttribute("data-active-tab");
     if(t==="yearly") loadYearly();
     if(t==="records") loadRecords();
@@ -1509,7 +1531,11 @@
       return nibNorm(r.p.nsn).indexOf(q)>=0 || String(r.p.description).toLowerCase().indexOf(qText)>=0;
     });
     if(!list.length){
-      $("nib-rows").innerHTML='<tr><td colspan="8"><div class="empty"><div class="big">No NIB products for '+esc(activeName())+'</div>Add rows to the nib_products table in Supabase.</div></td></tr>';
+      var canCopy=currentSite!==TEMPLATE_SITE && SITES.indexOf(TEMPLATE_SITE)>=0;
+      $("nib-rows").innerHTML='<tr><td colspan="8"><div class="empty"><div class="big">No NIB products for '+esc(activeName())+'</div>'+
+        (canCopy?'Start from the '+esc(SITE_LABELS[TEMPLATE_SITE]||TEMPLATE_SITE)+' product list (NSNs, descriptions, part #s and match words), then enter this site&rsquo;s Attestation quantities.<div style="margin-top:12px;"><button class="btn-add" id="nib-copy" style="max-width:340px;">Copy product list from '+esc(SITE_LABELS[TEMPLATE_SITE]||TEMPLATE_SITE)+'</button></div>'
+                 :'Use &ldquo;+ Add product&rdquo; to build this site&rsquo;s Attestation list.')+'</div></td></tr>';
+      var bc=$("nib-copy"); if(bc) bc.addEventListener("click",nibCopyTemplate);
     } else if(!shown.length){
       $("nib-rows").innerHTML='<tr><td colspan="8"><div class="empty">No products match this filter.</div></td></tr>';
     } else {
@@ -1605,6 +1631,24 @@
     req.then(function(){ nf.save.disabled=false; nibCloseForm(); nibProducts=null; loadNib(); })
        .catch(function(err){ nf.save.disabled=false; nf.status.style.color="var(--danger)"; nf.status.textContent=err.message; console.error(err); });
   }
+  function nibCopyTemplate(){
+    var target=currentSite, from=TEMPLATE_SITE;
+    if(!confirm("Copy the "+(SITE_LABELS[from]||from)+" NIB product list to "+activeName()+"?")) return;
+    var keepQty=confirm("Also copy the annual quantities?\n\nOK = copy "+(SITE_LABELS[from]||from)+"'s quantities\nCancel = set every quantity to 0 so you can enter this site's Attestation numbers");
+    var b=$("nib-copy"); if(b){ b.disabled=true; b.textContent="Copying…"; }
+    fetch(NIB_REST+"?select=*&site=eq."+encodeURIComponent(from)+"&order=line_no.asc",{headers:sbHeaders()})
+      .then(function(r){ if(!r.ok) throw new Error("read "+r.status); return r.json(); })
+      .then(function(rows){
+        if(!rows.length) throw new Error("The template site has no products.");
+        var now=new Date().toISOString();
+        var out=rows.map(function(p){ return { site:target, line_no:p.line_no, nsn:p.nsn, description:p.description,
+          annual_qty:keepQty?(Number(p.annual_qty)||0):0, pack_size:p.pack_size, unit:p.unit, producing_npa:p.producing_npa,
+          source:p.source, notes:p.notes, alt_codes:p.alt_codes||[], match_words:p.match_words||null, updated_at:now }; });
+        return nibWrite("POST","",out);
+      })
+      .then(function(){ nibProducts=null; loadNib(); })
+      .catch(function(err){ alert("Copy failed: "+err.message); if(b){ b.disabled=false; b.textContent="Copy product list"; } console.error(err); });
+  }
   function nibRemove(){
     if(!nibEditId) return;
     if(!confirm("Remove "+nf.nsn.value+" from the NIB product list? Purchases already logged are not deleted.")) return;
@@ -1650,8 +1694,8 @@
   function initApp(){
     if(appInited) return; appInited=true;
     fDate.value=new Date().toISOString().slice(0,10);
-    fillSites(); fillYears(); updateLineTotal();
-    loadEntries();
+    fillYears(); updateLineTotal();
+    loadSites().then(function(){ fillSites(); if(SITES.length) loadEntries(); });
     setInterval(function(){
       refreshSession().catch(function(){ showLoginGate("Your session expired. Please sign in again."); });
     }, 45*60*1000);
