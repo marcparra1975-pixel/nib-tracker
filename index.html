@@ -126,7 +126,19 @@
     background:transparent; border:none; border-bottom:3px solid transparent; color:var(--ink-soft); margin-bottom:-2px; }
   .tab-btn:hover{ color:var(--ink); }
   .tab-btn.active{ color:var(--ink); border-bottom-color:var(--brass); }
-  #tab-yearly, #tab-records, #tab-nib{ display:none; }
+  #tab-yearly, #tab-records, #tab-nib, #tab-admin{ display:none; }
+  #tab-btn-admin{ display:none; }
+  body[data-owner="true"] #tab-btn-admin{ display:inline-block; }
+  body[data-active-tab="admin"] #tab-ledger{ display:none; }
+  body[data-active-tab="admin"] #tab-admin{ display:block; }
+  body[data-active-tab="admin"] .picker{ display:none; }
+  .adm-grid{ display:grid; grid-template-columns:2fr 2fr 1fr auto; gap:10px; align-items:end; margin:12px 0 4px; }
+  .adm-grid label{ display:block; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:4px; }
+  .adm-grid input, .adm-grid select{ width:100%; font:inherit; font-size:14px; padding:9px 10px; border:1px solid var(--rule); border-radius:8px; background:#fff; }
+  .adm-msg{ font-size:13px; min-height:18px; margin-top:6px; }
+  .adm-role{ display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; background:#EEF1F7; }
+  .adm-role.owner{ background:#F3E6C8; }
+  @media (max-width:700px){ .adm-grid{ grid-template-columns:1fr; } }
   body[data-active-tab="nib"] #tab-ledger{ display:none; }
   body[data-active-tab="nib"] #tab-nib{ display:block; }
   body[data-active-tab="nib"] .picker{ display:none; }
@@ -318,6 +330,7 @@
       <button class="tab-btn" id="tab-btn-yearly" data-tab="yearly" role="tab" aria-selected="false">Year Tracking</button>
       <button class="tab-btn" id="tab-btn-records" data-tab="records" role="tab" aria-selected="false">Invoice Records</button>
       <button class="tab-btn" id="tab-btn-nib" data-tab="nib" role="tab" aria-selected="false">NIB Products</button>
+      <button class="tab-btn" id="tab-btn-admin" data-tab="admin" role="tab" aria-selected="false">Admin</button>
     </div>
 
     <div class="site-bar">
@@ -604,6 +617,33 @@
     </section>
 
   </div><!-- /#tab-nib -->
+
+  <div id="tab-admin">
+    <section class="panel">
+      <h2>People &amp; site access</h2>
+      <p class="cap">Owners see every site. Admins see only the site they&rsquo;re assigned to (2 admins max per site). Access is by email, so you can assign someone before they&rsquo;re invited.</p>
+      <div class="adm-grid">
+        <div><label for="adm-email">Email</label><input type="email" id="adm-email" placeholder="name@pcsi.org" autocomplete="off" /></div>
+        <div><label for="adm-site">Site</label><select id="adm-site"></select></div>
+        <div><label for="adm-role">Role</label><select id="adm-role"><option value="admin">Site admin</option><option value="owner">Owner (all sites)</option></select></div>
+        <div><button class="btn-add" id="adm-assign" style="padding:10px 18px;">Assign</button></div>
+      </div>
+      <div class="adm-msg" id="adm-msg"></div>
+      <div class="table-scroll"><table class="ledger"><thead><tr><th>Email</th><th>Site</th><th>Role</th><th>Added</th><th class="r"></th></tr></thead><tbody id="adm-members"></tbody></table></div>
+      <p class="nib-note">New person? They also need a login: Supabase &rarr; Authentication &rarr; Users &rarr; <b>Add user &rarr; Send invitation</b>. They set their own password from the email.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Sites</h2>
+      <p class="cap">Each site keeps its own ledger, invoices and NIB product list.</p>
+      <div class="adm-grid" style="grid-template-columns:3fr auto;">
+        <div><label for="adm-newsite">New site name</label><input type="text" id="adm-newsite" placeholder="e.g. Peterson Custodial" autocomplete="off" /></div>
+        <div><button class="btn-add" id="adm-addsite" style="padding:10px 18px;">Add site</button></div>
+      </div>
+      <div class="adm-msg" id="adm-site-msg"></div>
+      <div class="table-scroll"><table class="ledger"><thead><tr><th>Site</th><th class="r">Admins</th><th class="r">Ledger lines</th></tr></thead><tbody id="adm-sites"></tbody></table></div>
+    </section>
+  </div><!-- /#tab-admin -->
 
 </div>
 
@@ -1682,12 +1722,90 @@
     if(tab==="yearly") loadYearly();
     if(tab==="records") loadRecords();
     if(tab==="nib") loadNib();
+    if(tab==="admin") loadAdmin();
   }
   var tabLedgerBtn=$("tab-btn-ledger"), tabYearlyBtn=$("tab-btn-yearly"), tabRecordsBtn=$("tab-btn-records"), tabNibBtn=$("tab-btn-nib");
   if(tabNibBtn) tabNibBtn.addEventListener("click",function(){ setActiveTab("nib"); });
   if(tabLedgerBtn) tabLedgerBtn.addEventListener("click",function(){ setActiveTab("ledger"); });
   if(tabYearlyBtn) tabYearlyBtn.addEventListener("click",function(){ setActiveTab("yearly"); });
   if(tabRecordsBtn) tabRecordsBtn.addEventListener("click",function(){ setActiveTab("records"); });
+  var tabAdminBtn=$("tab-btn-admin");
+  if(tabAdminBtn) tabAdminBtn.addEventListener("click",function(){ setActiveTab("admin"); });
+
+  /* ---------- Admin (owner only): assign people to sites, add sites ---------- */
+  var IS_OWNER=false, admMembers=[], admSites=[];
+  var MEM_REST=SB_URL+"/rest/v1/site_members", SITES_REST=SB_URL+"/rest/v1/sites";
+  function checkOwner(){
+    var me=String((session&&session.email)||"").toLowerCase();
+    if(!me) return Promise.resolve(false);
+    return fetch(MEM_REST+"?select=role&role=eq.owner&email=eq."+encodeURIComponent(me),{headers:sbHeaders()})
+      .then(function(r){ return r.ok?r.json():[]; })
+      .then(function(rows){ IS_OWNER=!!(rows&&rows.length); document.body.setAttribute("data-owner",IS_OWNER?"true":"false"); return IS_OWNER; })
+      .catch(function(){ return false; });
+  }
+  function admSay(id,txt,bad){ var el=$(id); el.textContent=txt||""; el.style.color=bad?"var(--danger)":"var(--ink-soft)"; }
+  function loadAdmin(){
+    if(!IS_OWNER){ $("adm-members").innerHTML='<tr><td colspan="5"><div class="empty">Owner access only.</div></td></tr>'; return; }
+    $("adm-members").innerHTML='<tr><td colspan="5"><div class="empty">Loading&hellip;</div></td></tr>';
+    Promise.all([
+      fetch(MEM_REST+"?select=*&order=site.asc,email.asc",{headers:sbHeaders()}).then(function(r){ if(!r.ok) throw new Error("members "+r.status); return r.json(); }),
+      fetch(SITES_REST+"?select=*&order=sort.asc,label.asc",{headers:sbHeaders()}).then(function(r){ if(!r.ok) throw new Error("sites "+r.status); return r.json(); }),
+      fetch(REST+"?select=site",{headers:sbHeaders()}).then(function(r){ return r.ok?r.json():[]; })
+    ]).then(function(res){
+      admMembers=res[0]; admSites=res[1];
+      var lines={}; (res[2]||[]).forEach(function(x){ lines[x.site]=(lines[x.site]||0)+1; });
+      var lbl=function(k){ if(k==="*") return "All sites"; var x=admSites.filter(function(s){return s.site===k;})[0]; return x?x.label:k; };
+      $("adm-site").innerHTML=admSites.map(function(x){ return '<option value="'+esc(x.site)+'">'+esc(x.label)+'</option>'; }).join("");
+      $("adm-members").innerHTML=admMembers.length?admMembers.map(function(m){
+        return '<tr><td>'+esc(m.email)+'</td><td>'+esc(lbl(m.site))+'</td><td><span class="adm-role '+esc(m.role)+'">'+(m.role==="owner"?"Owner":"Site admin")+'</span></td>'+
+          '<td class="num">'+(m.added_at?fmtDate(String(m.added_at).slice(0,10)):"")+'</td>'+
+          '<td class="r"><button class="del" title="Remove access" data-email="'+esc(m.email)+'" data-site="'+esc(m.site)+'">&times;</button></td></tr>';
+      }).join(""):'<tr><td colspan="5"><div class="empty">No one assigned yet.</div></td></tr>';
+      Array.prototype.forEach.call($("adm-members").querySelectorAll(".del"),function(b){
+        b.addEventListener("click",function(){ admRemove(b.getAttribute("data-email"),b.getAttribute("data-site")); });
+      });
+      $("adm-sites").innerHTML=admSites.map(function(x){
+        var n=admMembers.filter(function(m){ return m.site===x.site&&m.role==="admin"; }).length;
+        return '<tr><td>'+esc(x.label)+'</td><td class="r num">'+n+' / 2</td><td class="r num">'+(lines[x.site]||0)+'</td></tr>';
+      }).join("");
+    }).catch(function(err){
+      $("adm-members").innerHTML='<tr><td colspan="5"><div class="empty">Could not load. Has multi_site_setup.sql been run in Supabase?</div></td></tr>';
+      console.error(err);
+    });
+  }
+  function admAssign(){
+    var email=String($("adm-email").value||"").trim().toLowerCase(), role=$("adm-role").value, site=role==="owner"?"*":$("adm-site").value;
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ admSay("adm-msg","Enter a valid email.",true); return; }
+    if(!site){ admSay("adm-msg","Pick a site.",true); return; }
+    admSay("adm-msg","Saving…");
+    fetch(MEM_REST,{method:"POST",headers:sbHeaders({"Prefer":"return=minimal,resolution=ignore-duplicates"}),body:JSON.stringify({email:email,site:site,role:role})})
+      .then(function(r){ if(!r.ok) return r.text().then(function(t){ var m=t; try{ m=JSON.parse(t).message||t; }catch(e){} throw new Error(m); }); })
+      .then(function(){ $("adm-email").value=""; admSay("adm-msg","Assigned "+email+". If they don't have a login yet, invite them in Supabase."); loadAdmin(); })
+      .catch(function(err){ admSay("adm-msg",err.message,true); });
+  }
+  function admRemove(email,site){
+    var me=String((session&&session.email)||"").toLowerCase();
+    if(email===me && site==="*" && admMembers.filter(function(m){return m.role==="owner";}).length<2){ alert("You're the only owner. Add another owner before removing yourself."); return; }
+    if(!confirm("Remove "+email+"'s access to "+(site==="*"?"all sites":site)+"? Their ledger entries stay.")) return;
+    fetch(MEM_REST+"?email=eq."+encodeURIComponent(email)+"&site=eq."+encodeURIComponent(site),{method:"DELETE",headers:sbHeaders()})
+      .then(function(r){ if(!r.ok) throw new Error("remove "+r.status); loadAdmin(); })
+      .catch(function(err){ admSay("adm-msg",err.message,true); });
+  }
+  function admAddSite(){
+    var name=String($("adm-newsite").value||"").trim();
+    if(name.length<3){ admSay("adm-site-msg","Enter a site name.",true); return; }
+    var slug=name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
+    var sort=admSites.reduce(function(m,x){ return Math.max(m,Number(x.sort)||0); },0)+1;
+    admSay("adm-site-msg","Saving…");
+    fetch(SITES_REST,{method:"POST",headers:sbHeaders({"Prefer":"return=minimal"}),body:JSON.stringify({site:name,label:name,slug:slug,sort:sort})})
+      .then(function(r){ if(r.status===409) throw new Error("That site already exists."); if(!r.ok) throw new Error("add site "+r.status); })
+      .then(function(){ $("adm-newsite").value=""; admSay("adm-site-msg","Added "+name+". Assign its admins above, then use NIB Products → Copy product list."); return loadSites(); })
+      .then(function(){ fillSites(); loadAdmin(); })
+      .catch(function(err){ admSay("adm-site-msg",err.message,true); });
+  }
+  $("adm-assign").addEventListener("click",admAssign);
+  $("adm-addsite").addEventListener("click",admAddSite);
+  $("adm-role").addEventListener("change",function(){ $("adm-site").disabled=$("adm-role").value==="owner"; });
 
   /* ---------- init ---------- */
   var appInited=false;
@@ -1695,7 +1813,7 @@
     if(appInited) return; appInited=true;
     fDate.value=new Date().toISOString().slice(0,10);
     fillYears(); updateLineTotal();
-    loadSites().then(function(){ fillSites(); if(SITES.length) loadEntries(); });
+    loadSites().then(function(){ fillSites(); if(SITES.length) loadEntries(); checkOwner(); });
     setInterval(function(){
       refreshSession().catch(function(){ showLoginGate("Your session expired. Please sign in again."); });
     }, 45*60*1000);
