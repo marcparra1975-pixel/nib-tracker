@@ -565,6 +565,20 @@
         <button class="btn-ghost" id="nib-add">&#43; Add product</button>
       </div>
 
+      <div class="nib-form" id="att-panel" hidden>
+        <h3>Load products from Attestation Form &mdash; <span class="records-site-name"></span></h3>
+        <p class="cap" style="margin:4px 0 10px;">Upload this site&rsquo;s Attestation Form (.xlsx or .csv), or copy the rows from Excel and paste them below. Columns needed: <b>NSN</b>, <b>Description</b>, <b>Annual qty</b> (estimated annual usage); Pack size, Unit and Producing NPA are picked up if present. Duplicate NSNs are combined.</p>
+        <div class="grid">
+          <div class="field c6"><label for="att-file">Attestation file</label><input type="file" id="att-file" accept=".xlsx,.xls,.csv" /></div>
+          <div class="field c12"><label for="att-paste">&hellip;or paste rows</label><textarea id="att-paste" rows="4" style="width:100%;font:inherit;font-size:13px;padding:8px;border:1px solid var(--rule);border-radius:8px;" placeholder="7930-01-380-8406&#9;Finish, Floor, Spray Buff, High Gloss, 5 gal&#9;40&#9;1 PA/PA&#9;PAIL"></textarea>
+            <button class="btn-ghost" id="att-paste-go" type="button" style="margin-top:6px;">Read pasted rows</button></div>
+          <div class="c12"><div class="record-status" id="att-msg"></div><div id="att-preview" style="margin-top:8px;"></div></div>
+          <div class="c12 nib-form-actions">
+            <button class="btn-add" id="att-import" disabled>Import products</button>
+            <button class="btn-ghost" id="att-cancel" type="button">Cancel</button>
+          </div>
+        </div>
+      </div>
       <div class="nib-form" id="nib-form" hidden>
         <h3 id="nib-form-title">Add a product</h3>
         <div class="grid">
@@ -1571,11 +1585,10 @@
       return nibNorm(r.p.nsn).indexOf(q)>=0 || String(r.p.description).toLowerCase().indexOf(qText)>=0;
     });
     if(!list.length){
-      var canCopy=currentSite!==TEMPLATE_SITE && SITES.indexOf(TEMPLATE_SITE)>=0;
       $("nib-rows").innerHTML='<tr><td colspan="8"><div class="empty"><div class="big">No NIB products for '+esc(activeName())+'</div>'+
-        (canCopy?'Start from the '+esc(SITE_LABELS[TEMPLATE_SITE]||TEMPLATE_SITE)+' product list (NSNs, descriptions, part #s and match words), then enter this site&rsquo;s Attestation quantities.<div style="margin-top:12px;"><button class="btn-add" id="nib-copy" style="max-width:340px;">Copy product list from '+esc(SITE_LABELS[TEMPLATE_SITE]||TEMPLATE_SITE)+'</button></div>'
-                 :'Use &ldquo;+ Add product&rdquo; to build this site&rsquo;s Attestation list.')+'</div></td></tr>';
-      var bc=$("nib-copy"); if(bc) bc.addEventListener("click",nibCopyTemplate);
+        'Load this site&rsquo;s own AbilityOne Attestation Form (NSNs, descriptions and annual quantities).'+
+        '<div style="margin-top:12px;"><button class="btn-add" id="nib-att-open" style="max-width:340px;">Load products from Attestation Form</button></div></div></td></tr>';
+      var bo=$("nib-att-open"); if(bo) bo.addEventListener("click",attOpen);
     } else if(!shown.length){
       $("nib-rows").innerHTML='<tr><td colspan="8"><div class="empty">No products match this filter.</div></td></tr>';
     } else {
@@ -1671,24 +1684,94 @@
     req.then(function(){ nf.save.disabled=false; nibCloseForm(); nibProducts=null; loadNib(); })
        .catch(function(err){ nf.save.disabled=false; nf.status.style.color="var(--danger)"; nf.status.textContent=err.message; console.error(err); });
   }
-  function nibCopyTemplate(){
-    var target=currentSite, from=TEMPLATE_SITE;
-    if(!confirm("Copy the "+(SITE_LABELS[from]||from)+" NIB product list to "+activeName()+"?")) return;
-    var keepQty=confirm("Also copy the annual quantities?\n\nOK = copy "+(SITE_LABELS[from]||from)+"'s quantities\nCancel = set every quantity to 0 so you can enter this site's Attestation numbers");
-    var b=$("nib-copy"); if(b){ b.disabled=true; b.textContent="Copying…"; }
-    fetch(NIB_REST+"?select=*&site=eq."+encodeURIComponent(from)+"&order=line_no.asc",{headers:sbHeaders()})
-      .then(function(r){ if(!r.ok) throw new Error("read "+r.status); return r.json(); })
-      .then(function(rows){
-        if(!rows.length) throw new Error("The template site has no products.");
-        var now=new Date().toISOString();
-        var out=rows.map(function(p){ return { site:target, line_no:p.line_no, nsn:p.nsn, description:p.description,
-          annual_qty:keepQty?(Number(p.annual_qty)||0):0, pack_size:p.pack_size, unit:p.unit, producing_npa:p.producing_npa,
-          source:p.source, notes:p.notes, alt_codes:p.alt_codes||[], match_words:p.match_words||null, updated_at:now }; });
-        return nibWrite("POST","",out);
-      })
-      .then(function(){ nibProducts=null; loadNib(); })
-      .catch(function(err){ alert("Copy failed: "+err.message); if(b){ b.disabled=false; b.textContent="Copy product list"; } console.error(err); });
+  /* ---------- Load products from a site's Attestation Form (.xlsx / .csv / pasted rows) ---------- */
+  var attRows=[];
+  function attOpen(){ Array.prototype.forEach.call(document.querySelectorAll(".records-site-name"),function(el){ el.textContent=activeName(); }); $("att-panel").hidden=false; $("att-msg").textContent=""; $("att-preview").innerHTML=""; $("att-import").disabled=true; attRows=[];
+    $("att-panel").scrollIntoView({behavior:"smooth",block:"start"}); }
+  function attClose(){ $("att-panel").hidden=true; attRows=[]; $("att-file").value=""; $("att-paste").value=""; }
+  function attNsn(v){
+    var t=String(v==null?"":v).toUpperCase().replace(/[^0-9A-Z]/g,"");
+    if(!/^\d{4}\d{2}[0-9A-Z]{3}\d{4}$/.test(t)) return "";
+    return t.slice(0,4)+"-"+t.slice(4,6)+"-"+t.slice(6,9)+"-"+t.slice(9);
   }
+  function attNum(v){ var n=parseFloat(String(v==null?"":v).replace(/[^0-9.\-]/g,"")); return isNaN(n)?0:n; }
+  function attParse(grid){
+    grid=(grid||[]).map(function(r){ return (r||[]).map(function(c){ return c==null?"":String(c).trim(); }); })
+                   .filter(function(r){ return r.some(function(c){ return c!==""; }); });
+    var hi=-1;
+    for(var i=0;i<Math.min(grid.length,25);i++){ if(grid[i].some(function(c){ return /\bnsn\b|national stock/i.test(c); })){ hi=i; break; } }
+    var col={nsn:-1,desc:-1,qty:-1,pack:-1,unit:-1,npa:-1};
+    if(hi>=0){
+      grid[hi].forEach(function(h,j){ var x=h.toLowerCase();
+        if(col.nsn<0 && /nsn|national stock/.test(x)) col.nsn=j;
+        else if(col.desc<0 && /desc|nomenclature|item name|product/.test(x)) col.desc=j;
+        else if(/annual|usage|estimated/.test(x)) col.qty=j;
+        else if(col.qty<0 && /qty|quantity/.test(x)) col.qty=j;
+        else if(col.pack<0 && /pack|size/.test(x)) col.pack=j;
+        else if(col.unit<0 && /unit|u\/i|uom|issue/.test(x)) col.unit=j;
+        else if(col.npa<0 && /npa|producing|nonprofit|agency/.test(x)) col.npa=j;
+      });
+    } else { col={nsn:0,desc:1,qty:2,pack:3,unit:4,npa:5}; }     // no header: NSN, Description, Qty, Pack, Unit, NPA
+    var body=grid.slice(hi+1), byNsn={}, order=[];
+    body.forEach(function(r){
+      var nsn=attNsn(r[col.nsn]); if(!nsn) return;
+      var q=col.qty>=0?attNum(r[col.qty]):0;
+      if(!byNsn[nsn]){ byNsn[nsn]={ nsn:nsn, description:col.desc>=0?r[col.desc]:"", annual_qty:q, parts:[q],
+        pack_size:col.pack>=0?(r[col.pack]||""):"", unit:col.unit>=0?String(r[col.unit]||"").toUpperCase():"", producing_npa:col.npa>=0?(r[col.npa]||""):"" }; order.push(nsn); }
+      else { byNsn[nsn].annual_qty+=q; byNsn[nsn].parts.push(q); }
+    });
+    return order.map(function(k,i){ var x=byNsn[k];
+      x.line_no=i+1; x.notes=x.parts.length>1?(x.parts.length+" Attestation lines combined ("+x.parts.join(" + ")+")"):null; delete x.parts; return x; });
+  }
+  function attShow(rows,src){
+    attRows=rows;
+    if(!rows.length){ $("att-msg").style.color="var(--danger)"; $("att-msg").textContent="No NSN rows found in "+src+". The form needs an NSN column (e.g. 7930-01-380-8406)."; $("att-import").disabled=true; $("att-preview").innerHTML=""; return; }
+    var total=rows.reduce(function(s,r){ return s+r.annual_qty; },0);
+    $("att-msg").style.color="var(--ink-soft)";
+    $("att-msg").textContent="Found "+rows.length+" products ("+nibFmt(total)+" annual units) in "+src+". Check the preview, then import.";
+    $("att-preview").innerHTML='<div class="table-scroll" style="max-height:260px;overflow:auto;"><table class="ledger"><thead><tr><th>#</th><th>NSN</th><th>Description</th><th class="r">Annual qty</th><th>Pack</th><th>Unit</th></tr></thead><tbody>'+
+      rows.map(function(r){ return '<tr><td class="num">'+r.line_no+'</td><td class="num">'+esc(r.nsn)+'</td><td>'+esc(r.description)+(r.notes?'<div class="meta">'+esc(r.notes)+'</div>':'')+'</td><td class="r num">'+nibFmt(r.annual_qty)+'</td><td>'+esc(r.pack_size)+'</td><td>'+esc(r.unit)+'</td></tr>'; }).join("")+'</tbody></table></div>';
+    $("att-import").disabled=false;
+  }
+  function attFromFile(f){
+    if(!f) return;
+    var rd=new FileReader();
+    rd.onload=function(e){
+      try{
+        var wb=XLSX.read(new Uint8Array(e.target.result),{type:"array"}), best=[];
+        wb.SheetNames.forEach(function(n){ var rows=attParse(XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:false,defval:""})); if(rows.length>best.length) best=rows; });
+        attShow(best,f.name);
+      }catch(err){ $("att-msg").style.color="var(--danger)"; $("att-msg").textContent="Could not read "+f.name+". Save it as .xlsx or .csv, or paste the rows below."; console.error(err); }
+    };
+    rd.readAsArrayBuffer(f);
+  }
+  function attFromPaste(){
+    var txt=$("att-paste").value||"";
+    var grid=txt.split(/\r?\n/).map(function(l){ return l.indexOf("\t")>=0?l.split("\t"):l.split(","); });
+    attShow(attParse(grid),"the pasted rows");
+  }
+  function attImport(){
+    if(!attRows.length) return;
+    var target=currentSite, b=$("att-import"); b.disabled=true; b.textContent="Importing…";
+    /* carry over part #s and match words for the same NSNs from the template site, when this login can read it */
+    var pTpl=(target!==TEMPLATE_SITE && SITES.indexOf(TEMPLATE_SITE)>=0)
+      ? fetch(NIB_REST+"?select=nsn,alt_codes,match_words&site=eq."+encodeURIComponent(TEMPLATE_SITE),{headers:sbHeaders()}).then(function(r){ return r.ok?r.json():[]; }).catch(function(){ return []; })
+      : Promise.resolve([]);
+    pTpl.then(function(tpl){
+      var map={}; (tpl||[]).forEach(function(t){ map[nibNorm(t.nsn)]=t; });
+      var now=new Date().toISOString();
+      var out=attRows.map(function(r){ var t=map[nibNorm(r.nsn)]||{};
+        return { site:target, line_no:r.line_no, nsn:r.nsn, description:r.description||r.nsn, annual_qty:r.annual_qty,
+          pack_size:r.pack_size, unit:r.unit||"CASE", producing_npa:r.producing_npa, source:"Attestation", notes:r.notes,
+          alt_codes:t.alt_codes||[], match_words:t.match_words||null, updated_at:now }; });
+      return nibWrite("POST","",out);
+    }).then(function(){ b.textContent="Import products"; attClose(); nibProducts=null; loadNib(); })
+      .catch(function(err){ b.disabled=false; b.textContent="Import products"; $("att-msg").style.color="var(--danger)"; $("att-msg").textContent="Import failed: "+err.message; console.error(err); });
+  }
+  $("att-file").addEventListener("change",function(){ attFromFile(this.files&&this.files[0]); });
+  $("att-paste-go").addEventListener("click",attFromPaste);
+  $("att-import").addEventListener("click",attImport);
+  $("att-cancel").addEventListener("click",attClose);
   function nibRemove(){
     if(!nibEditId) return;
     if(!confirm("Remove "+nf.nsn.value+" from the NIB product list? Purchases already logged are not deleted.")) return;
